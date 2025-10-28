@@ -15,7 +15,7 @@ export default function WireframeGenerated() {
 
   const handleAccept = () => {
     // Arahkan ke halaman berikutnya setelah menerima hasil wireframe
-    alert("Wireframe diterima!");
+     navigate("/HasilGenerate");
   };
 
   const handleEdit = () => {
