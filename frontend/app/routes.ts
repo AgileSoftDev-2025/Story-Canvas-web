@@ -12,4 +12,5 @@ export default [
   route("UserStoryPage", "routes/userstory.tsx"),
   route("UserStoryEditPage", "routes/userstory-edit.tsx"),
   route("HistoryDetail", "routes/HistoryDetail.tsx"),
+  route("PreviewFinal", "routes/preview.tsx"),
 ] satisfies RouteConfig;
