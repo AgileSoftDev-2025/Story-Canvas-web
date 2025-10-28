@@ -7,7 +7,7 @@ export default function HistoryDetail() {
   const navigate = useNavigate();
 
   const handleExport = () => {
-    navigate("/export");
+    navigate("/PreviewFinal");
   };
 
   // 🧩 Data contoh (bisa diganti dengan data dinamis nanti)
@@ -22,16 +22,11 @@ export default function HistoryDetail() {
         {/* 🔹 Header Section: Title + Date + Export Button */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {projectTitle}
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{projectTitle}</h1>
             <p className="text-gray-500 text-sm mt-1">{projectDate}</p>
           </div>
 
-          <button
-            onClick={handleExport}
-            className="mt-4 md:mt-0 bg-gradient-to-r from-[#5561AA] to-[#4699DF] text-white font-semibold px-6 py-2 rounded-lg shadow-md hover:opacity-90 transition"
-          >
+          <button onClick={handleExport} className="mt-4 md:mt-0 bg-gradient-to-r from-[#5561AA] to-[#4699DF] text-white font-semibold px-6 py-2 rounded-lg shadow-md hover:opacity-90 transition">
             Export
           </button>
         </div>
@@ -82,15 +77,8 @@ export default function HistoryDetail() {
           <h2 className="text-2xl font-bold mb-4 text-[#4699DF]">Wireframe</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
             {[1, 2, 3].map((id) => (
-              <div
-                key={id}
-                className="rounded-xl overflow-hidden border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800 shadow-sm hover:scale-[1.02] transition"
-              >
-                <img
-                  src={`/assets/generated${id}.png`}
-                  alt={`Wireframe ${id}`}
-                  className="w-full h-auto object-contain"
-                />
+              <div key={id} className="rounded-xl overflow-hidden border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800 shadow-sm hover:scale-[1.02] transition">
+                <img src={`/assets/generated${id}.png`} alt={`Wireframe ${id}`} className="w-full h-auto object-contain" />
               </div>
             ))}
           </div>
@@ -104,11 +92,7 @@ export default function HistoryDetail() {
             {[1, 2, 3, 4].map((num) => (
               <div key={num}>
                 <p className="font-semibold">Scenario {num}:</p>
-                <p className="mt-1">
-                  Given the individual users are on the related HTML page,
-                  when they try to link their bank accounts,
-                  then the system should respond appropriately.
-                </p>
+                <p className="mt-1">Given the individual users are on the related HTML page, when they try to link their bank accounts, then the system should respond appropriately.</p>
               </div>
             ))}
           </div>
