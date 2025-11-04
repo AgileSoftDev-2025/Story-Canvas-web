@@ -1,5 +1,5 @@
 import type { Route } from "./+types/hasilgenerate";
-import HasilGenerate from "../pages/onboarding/hasilgenerate"; // default import sesuai file
+import HasilGenerate from "../pages/export/hasilgenerate"; // default import sesuai file
 
 export function meta({}: Route.MetaArgs) {
   return [

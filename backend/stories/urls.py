@@ -1,8 +1,13 @@
-# stories/urls.py
-
 from django.urls import path
-from . import views
+from .views import (
+    health_check,
+    get_csrf_token,
+)
 
 urlpatterns = [
-    path('', views.index, name='index'),
+    # Health check
+    path('health/', health_check, name='health_check'),
+    
+    # Authentication endpoints
+    path('api/auth/csrf/', get_csrf_token, name='csrf_token'),
 ]
