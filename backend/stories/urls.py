@@ -37,7 +37,27 @@ from stories.views.wireframe import (
     delete_wireframe
 )
 
+from stories.views.auth.token_auth import (
+    signup,
+    signin,
+    current_user,
+    signout,
+    refresh_token,
+
+)
+
+from stories.views.auth.auth_debug import debug_signin
+
+
 urlpatterns = [
+    #auth endpoints
+    path('auth/debug-signin/', debug_signin, name='debug_signin'),
+    path('auth/signup/', signup, name='signup'),
+    path('auth/signin/', signin, name='signin'),
+    path('auth/user/', current_user, name='current_user'),
+    path('auth/signout/', signout, name='signout'),
+    path('auth/refresh/', refresh_token, name='refresh_token'),
+
     # User Stories endpoints
     path('user-stories/', get_user_stories, name='get_user_stories'),
     path('user-stories/create/', create_user_story, name='create_user_story'),
