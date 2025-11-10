@@ -304,7 +304,9 @@ export default function PreviewFinal() {
                 <p className="text-gray-600">{someSelected ? "Download your selected documentation in a single ZIP package." : "Select the items you want to export above."}</p>
               </div>
               <div className="flex space-x-4">
-                <button onClick={() => window.history.back()} className="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold text-base hover:bg-gray-50 transition">
+                <button 
+                  onClick={() => window.history.back()} 
+                  className="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold text-base hover:bg-gray-50 transition">
                   Go Back
                 </button>
                 <button
