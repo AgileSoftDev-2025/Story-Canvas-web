@@ -8,6 +8,13 @@ from stories.views.project_description import (
     get_project_stats
 )
 
+from stories.views.export_preview import (
+    preview_export_by_id,
+    preview_project_export,
+    generate_export_preview,
+    list_user_exports
+)
+
 from stories.views.health import health_check
 
 from stories.views.user_story import (
@@ -102,4 +109,9 @@ urlpatterns = [
     path('scenarios/create/project/<str:project_id>/', create_scenario, name='create_scenario_for_project'),
     path('scenarios/<str:scenario_id>/update/', update_scenario, name='update_scenario'),
     path('scenarios/<str:scenario_id>/delete/', delete_scenario, name='delete_scenario'),
+    
+    path('exports/preview/<str:export_id>/', preview_export_by_id, name='preview-export-by-id'),
+    path('projects/<str:project_id>/export-preview/', preview_project_export, name='preview-project-export'),
+    path('projects/<str:project_id>/generate-export-preview/', generate_export_preview, name='generate-export-preview'),
+    path('exports/my-exports/', list_user_exports, name='list-user-exports'),
 ]
