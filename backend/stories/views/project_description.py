@@ -3,6 +3,9 @@ from django.shortcuts import get_object_or_404
 import json
 from stories.utils.decorators import api_view
 from stories.models import Project, CustomUser
+from django.views.decorators.csrf import csrf_exempt
+from stories.decorators.jwt_decorator import jwt_token
+from stories.models import Project, UserStory, Wireframe, Scenario
 from stories.serializers.project_description import ProjectDescriptionSerializer, ProjectCreateSerializer
 
 def get_request_data(request):
@@ -206,6 +209,56 @@ def get_project_stats(request, project_id):
             'success': False,
             'error': 'Project not found'
         }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+    
+@csrf_exempt
+@jwt_token
+def get_projects_history(request):
+    """
+    Get all projects for the authenticated user with JWT protection
+    GET /api/history/projects/
+    """
+    try:
+        # Filter projects by authenticated user (from JWT token)
+        projects = Project.objects.filter(user=request.user).order_by('-created_date')
+        
+        # Prepare simple projects data
+        projects_data = []
+        for project in projects:
+            # Get actual counts from database
+            user_stories_count = UserStory.objects.filter(project=project).count()
+            wireframes_count = Wireframe.objects.filter(project=project).count()
+            scenarios_count = Scenario.objects.filter(project=project).count()
+            
+            project_data = {
+                'project_id': project.project_id,
+                'title': project.title,
+                'objective': project.objective,
+                'status': project.status,
+                'domain': project.domain,
+                'language': project.language,
+                'created_date': project.created_date,
+                'last_modified': project.last_modified,
+                'statistics': {
+                    'user_stories': user_stories_count,
+                    'wireframes': wireframes_count,
+                    'scenarios': scenarios_count
+                }
+            }
+            projects_data.append(project_data)
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Projects retrieved successfully',
+            'data': projects_data,
+            'count': len(projects_data),
+            'user': request.user.username
+        })
+        
     except Exception as e:
         return JsonResponse({
             'success': False,
