@@ -304,3 +304,49 @@ def get_user_stories_by_priority(request, priority):
             'success': False,
             'error': str(e)
         }, status=500)
+    
+@api_view(['POST'])
+def generate_user_stories(request, project_id):
+    """
+    Generate user stories automatically for a project using AI
+    POST /api/projects/{project_id}/generate-user-stories/
+    """
+    try:
+        project = Project.objects.get(project_id=project_id)
+        
+        # Check if project has basic info
+        if not project.title:
+            return JsonResponse({
+                'success': False,
+                'error': 'Project title is required to generate user stories'
+            }, status=400)
+        
+        # Initialize generator
+        from stories.services.user_story_generator import UserStoryGenerator
+        generator = UserStoryGenerator()
+        
+        # Generate stories
+        created_stories = generator.generate_user_stories_for_project(project)
+        
+        # Serialize results
+        from stories.serializers.user_story_serializer import serialize_user_story_list
+        stories_data = serialize_user_story_list(created_stories)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Successfully generated {len(created_stories)} user stories',
+            'data': stories_data,
+            'count': len(created_stories),
+            'generated_by_ai': True
+        }, status=201)
+        
+    except Project.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Project not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Failed to generate user stories: {str(e)}'
+        }, status=500)

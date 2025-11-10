@@ -59,6 +59,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'StoryCanvas.urls'
 
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -143,3 +144,9 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Replicate API Configuration
+REPLICATE_API_TOKEN = os.environ.get('REPLICATE_API_TOKEN', 'r8_EmI71U9RM6QgLvDgep4dTYbucvUjjru46Y3Ek')
+
+# SpaCy model (optional)
+SPACY_MODEL = 'en_core_web_sm'
