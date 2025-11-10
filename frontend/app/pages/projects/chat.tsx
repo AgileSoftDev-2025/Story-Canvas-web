@@ -38,12 +38,12 @@ export default function InputProject() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-white dark:bg-gray-950">
+    <div className="flex flex-col min-h-screen bg-white text-gray-900">
       <Header />
 
       <main className="flex-grow px-8 py-10 max-w-4xl mx-auto animate-fade-in-up relative pb-32">
         {/* Title */}
-        <h1 className="text-4xl font-extrabold mb-10 text-center text-gray-900 dark:text-gray-100">
+        <h1 className="text-4xl font-extrabold mb-10 text-center">
           INPUT YOUR PROJECT DESCRIPTION!
         </h1>
 
@@ -61,7 +61,7 @@ export default function InputProject() {
             value={formData.goal}
             onChange={(e) => handleChange("goal", e.target.value)}
             placeholder="Ex: Help individuals manage their finances, track expenses, and make smarter investment decisions through AI-driven insights and automation."
-            className="w-full p-3 rounded-md border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
             rows={3}
           />
         </section>
@@ -73,7 +73,7 @@ export default function InputProject() {
             value={formData.users}
             onChange={(e) => handleChange("users", e.target.value)}
             placeholder="Ex: Individual Users, Financial Advisors, Investment Managers, Administrators"
-            className="w-full p-3 rounded-md border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
             rows={2}
           />
         </section>
@@ -85,7 +85,7 @@ export default function InputProject() {
             value={formData.fitur}
             onChange={(e) => handleChange("fitur", e.target.value)}
             placeholder="Ex: Automated expense tracking, AI-driven budgeting, personalized investment suggestions, etc."
-            className="w-full p-3 rounded-md border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
             rows={3}
           />
         </section>
@@ -97,7 +97,7 @@ export default function InputProject() {
             value={formData.alur}
             onChange={(e) => handleChange("alur", e.target.value)}
             placeholder="Ex: User links bank accounts → System tracks transactions → AI generates budget plan → ..."
-            className="w-full p-3 rounded-md border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
             rows={3}
           />
         </section>
@@ -109,7 +109,7 @@ export default function InputProject() {
             value={formData.scope}
             onChange={(e) => handleChange("scope", e.target.value)}
             placeholder="Ex: Focuses on personal finance and investment guidance for individuals."
-            className="w-full p-3 rounded-md border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
             rows={2}
           />
         </section>
@@ -121,7 +121,7 @@ export default function InputProject() {
             value={formData.info}
             onChange={(e) => handleChange("info", e.target.value)}
             placeholder="Any other additional context or constraints about your project."
-            className="w-full p-3 rounded-md border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
             rows={2}
           />
         </section>
@@ -130,7 +130,7 @@ export default function InputProject() {
         <div className="absolute bottom-10 right-12">
           <button
             onClick={handleSubmit}
-            className="bg-gradient text-white font-semibold px-8 py-3 rounded-full shadow-md inline-block hover-lift transition"
+            className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold px-8 py-3 rounded-full shadow-md inline-block hover:scale-105 transition-transform"
           >
             Submit Project
           </button>
