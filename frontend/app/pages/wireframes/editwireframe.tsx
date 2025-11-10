@@ -28,16 +28,16 @@ export default function EditWireframe() {
   };
 
   const handleBack = () => {
-    navigate(-1); // kembali ke halaman sebelumnya
+    navigate(-1);
   };
 
   const handleSubmit = () => {
     alert("Wireframe telah disubmit!");
-    navigate("/WireframeGenerated"); // optional: arahkan ke halaman lain setelah submit
+    navigate("/WireframeGenerated");
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-white text-gray-800">
       <Header />
 
       <main className="container mx-auto w-full max-w-5xl flex-1 px-6 py-8">
@@ -46,7 +46,7 @@ export default function EditWireframe() {
           <h1 className="text-4xl font-bold md:text-5xl">Edit Wireframes</h1>
           <button
             onClick={handleBack}
-            className="rounded-lg border border-gray-300 bg-white px-6 py-2 font-medium text-[#4699DF] shadow-sm transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
+            className="rounded-lg border border-gray-300 bg-white px-6 py-2 font-medium text-[#4699DF] shadow-sm transition hover:bg-gray-50"
           >
             Back
           </button>
@@ -57,7 +57,7 @@ export default function EditWireframe() {
           {wireframes.map((wf) => (
             <div
               key={wf.id}
-              className="p-6 rounded-2xl border border-gray-300 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 space-y-5"
+              className="p-6 rounded-2xl border border-gray-300 bg-white shadow-sm space-y-5"
             >
               {/* Wireframe Image */}
               <div>
@@ -67,28 +67,28 @@ export default function EditWireframe() {
                 <img
                   src={wf.image}
                   alt={`Wireframe ${wf.id}`}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700"
+                  className="w-full rounded-lg border border-gray-300"
                 />
               </div>
 
               {/* HTML Editor */}
               <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
                   HTML Code
                 </label>
                 <textarea
                   defaultValue={wf.html}
-                  className="w-full h-40 p-3 rounded-md border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 font-mono text-sm text-gray-800 dark:text-gray-100"
+                  className="w-full h-40 p-3 rounded-md border border-gray-300 bg-gray-50 font-mono text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-400"
                 ></textarea>
               </div>
 
               {/* Preview */}
               <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
                   Preview
                 </label>
                 <div
-                  className="border border-gray-300 dark:border-gray-700 p-4 rounded-md bg-gray-50 dark:bg-gray-800"
+                  className="border border-gray-300 p-4 rounded-md bg-gray-50"
                   dangerouslySetInnerHTML={{ __html: wf.html }}
                 />
               </div>
@@ -119,17 +119,17 @@ export default function EditWireframe() {
         {/* AI Popup */}
         {activeAI && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm transition">
-            <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-xl w-full max-w-lg relative border border-gray-200 dark:border-gray-700">
+            <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-lg relative border border-gray-200">
               <button
                 onClick={() => setActiveAI(false)}
-                className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
               >
                 ✕
               </button>
 
               <h2 className="text-xl font-semibold mb-3 underline">Bantuan AI</h2>
 
-              <div className="border border-gray-300 dark:border-gray-700 rounded-md h-60 p-3 overflow-y-auto bg-gray-50 dark:bg-gray-800">
+              <div className="border border-gray-300 rounded-md h-60 p-3 overflow-y-auto bg-gray-50">
                 <p className="text-gray-500 italic">
                   (Placeholder) Chat AI akan muncul di sini untuk membantu
                   memperbaiki HTML atau memberikan saran desain.
@@ -140,7 +140,7 @@ export default function EditWireframe() {
                 <input
                   type="text"
                   placeholder="Ketik pesan ke AI..."
-                  className="flex-grow p-2 rounded-md border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-100"
+                  className="flex-grow p-2 rounded-md border border-gray-300 bg-gray-50 text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-400"
                 />
                 <button className="rounded-lg bg-gradient-to-r from-[#5561AA] to-[#4699DF] px-5 py-2 font-medium text-white shadow-sm transition hover:opacity-95">
                   Kirim

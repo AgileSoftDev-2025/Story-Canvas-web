@@ -9,6 +9,7 @@ import {
   Trash2,
   X,
   Check,
+  Plus,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -60,6 +61,11 @@ export default function History() {
     navigate(`/HistoryDetail`);
   };
 
+  // ✅ Klik tombol create project
+  const handleCreateNew = () => {
+    navigate(`/chat`);
+  };
+
   return (
     <div className="flex flex-col min-h-screen font-sans bg-white text-gray-800">
       <Header />
@@ -86,9 +92,16 @@ export default function History() {
           </div>
         </div>
 
-        <p className="text-center text-gray-400 mb-10">
-          Search by name or summary
-        </p>
+        {/* 🔹 Tombol Create New Project (pengganti teks lama) */}
+        <div className="text-center mb-10">
+          <button
+            onClick={handleCreateNew}
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-[#5F3D89] to-[#4699DF] text-white font-medium px-6 py-3 rounded-full shadow-md hover:opacity-90 transition"
+          >
+            <Plus className="w-5 h-5" />
+            Create New Chat
+          </button>
+        </div>
 
         {/* 🔹 Chat List */}
         <div className="space-y-6 max-w-4xl mx-auto">
