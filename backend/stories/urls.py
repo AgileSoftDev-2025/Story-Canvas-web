@@ -47,3 +47,28 @@ urlpatterns = [
     path('scenarios/<uuid:scenario_id>/update/', update_scenario, name='update_scenario'),
     path('scenarios/<uuid:scenario_id>/delete/', delete_scenario, name='delete_scenario'),
 ]
+
+
+# stories/urls.py
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import ProjectViewSet, UserStoryViewSet, GenerationSessionViewSet, RAGAPIView
+
+router = DefaultRouter()
+router.register(r'projects', ProjectViewSet)
+router.register(r'user-stories', UserStoryViewSet)
+router.register(r'generation-sessions', GenerationSessionViewSet)
+router.register(r'rag', RAGAPIView, basename='rag')
+
+urlpatterns = [
+    path('api/', include(router.urls)),
+]
+
+# stories/urls.py (project level)
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', include('stories.urls')),
+]
