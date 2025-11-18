@@ -1,86 +1,24 @@
-import React, { useState } from "react";
+// app/pages/HasilGenerate.tsx
+import React, { useState, useEffect } from "react";
 import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
- 
+// Import service dan types
+import type { Scenario, ProjectScenarioResponse, GenerateProjectScenarioResponse, AcceptProjectScenarioResponse } from "../../../services/scenarioServices";
+import { scenarioService } from "../../../services/scenarioServices";
 
 export default function HasilGenerate() {
   const [isEditing, setIsEditing] = useState(false);
   const navigate = useNavigate();
-  const [content, setContent] = useState(`User Story Scenario
+  const { projectId } = useParams<{ projectId: string }>();
   
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [projectTitle, setProjectTitle] = useState("");
 
-User Story 1 – Login dan Pembuatan Akun
-Sebagai pengguna baru, saya ingin dapat membuat akun agar saya bisa masuk ke sistem dan menggunakan fitur-fitur yang tersedia.
-
-Scenario 1:
-Scenario: Pengguna berhasil membuat akun baru
-Given pengguna membuka halaman pendaftaran
-When pengguna mengisi semua data dengan benar dan klik "Daftar"
-Then sistem menyimpan data pengguna dan menampilkan pesan "Pendaftaran berhasil"
-
-Scenario 2:
-Scenario: Pengguna gagal membuat akun karena email sudah digunakan
-Given pengguna mengisi formulir dengan email yang sudah terdaftar
-When pengguna klik "Daftar"
-Then sistem menampilkan pesan "Email sudah digunakan" dan meminta pengguna login
-
-Scenario 3:
-Scenario: Pengguna login dengan akun yang valid
-Given pengguna membuka halaman login
-When pengguna memasukkan email dan password yang benar
-Then sistem mengarahkan ke dashboard utama
-
-Scenario 4:
-Scenario: Pengguna lupa password
-Given pengguna berada di halaman login
-When pengguna klik "Lupa Password" dan memasukkan email yang terdaftar
-Then sistem mengirim link reset password ke email tersebut
-
-Scenario 5:
-Scenario: Pengguna mencoba login tanpa mengisi form
-Given pengguna di halaman login
-When pengguna klik "Masuk" tanpa mengisi email dan password
-Then sistem menampilkan pesan error "Harap isi semua kolom"
-
-
-User Story 2 – Menggunakan Fitur AI untuk Menulis Cerita
-Sebagai pengguna yang sudah login, saya ingin menggunakan fitur AI agar bisa membantu menulis dan memperbaiki cerita saya.
-
-Scenario 1:
-Scenario: Pengguna membuka fitur AI dan memasukkan prompt
-Given pengguna berada di halaman “Hasil Generate”
-When pengguna klik tombol "Butuh bantuan AI?" dan mengetik instruksi
-Then sistem AI memproses input dan menampilkan saran di area hasil
-
-Scenario 2:
-Scenario: Pengguna menerapkan hasil saran AI
-Given AI sudah memberikan saran di jendela pop-up
-When pengguna klik tombol “Terapkan ke Editor”
-Then isi editor diperbarui dengan saran AI terbaru
-
-Scenario 3:
-Scenario: Pengguna menutup pop-up AI
-Given pop-up AI sedang terbuka
-When pengguna klik tombol "Tutup"
-Then pop-up AI menutup dan kembali ke halaman utama
-
-Scenario 4:
-Scenario: Pengguna mengedit hasil generate secara manual
-Given pengguna melihat hasil generate
-When pengguna klik tombol “Edit”
-Then sistem menampilkan text area untuk mengubah isi scenario secara manual
-
-Scenario 5:
-Scenario: Pengguna menyimpan hasil edit
-Given pengguna selesai mengedit isi scenario
-When pengguna klik tombol “Save”
-Then sistem menyimpan perubahan dan menampilkan hasil akhir yang diperbarui
-`);
-
-
-  // === Tambahan fitur Bantuan AI ===-w
+  // === Tambahan fitur Bantuan AI ===
   const [showAI, setShowAI] = useState(false);
   const [aiInput, setAiInput] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
@@ -88,20 +26,200 @@ Then sistem menyimpan perubahan dan menampilkan hasil akhir yang diperbarui
     { role: "user" | "assistant"; content: string }[]
   >([]);
 
+  // Fetch scenarios from API - BERDASARKAN PROJECT ID
+  useEffect(() => {
+    if (projectId) {
+      fetchProjectScenarios();
+    } else {
+      setError("No project ID provided");
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  const fetchProjectScenarios = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (!projectId) {
+        setError("No project ID provided");
+        return;
+      }
+      
+      console.log("🔍 [DEBUG] Fetching scenarios for project:", projectId);
+      console.log("🔍 [DEBUG] Full URL:", `http://127.0.0.1:8000/projects/${projectId}/scenarios/`);
+      
+      const result = await scenarioService.getProjectScenarios(projectId);
+      console.log("✅ [DEBUG] API Response:", JSON.stringify(result, null, 2));
+      
+      if (result.success) {
+        // Handle both response structures
+        const scenariosData = result.scenarios || [];
+        const projectTitle = result.project_title || "Project Scenarios";
+        
+        console.log("📋 [DEBUG] Scenarios data:", scenariosData);
+        console.log("🏷️ [DEBUG] Project title:", projectTitle);
+        console.log("🔢 [DEBUG] Scenarios count:", scenariosData.length);
+        
+        setScenarios(scenariosData);
+        setProjectTitle(projectTitle);
+      } else {
+        console.log("❌ [DEBUG] API Error:", result.error);
+        setError(result.error || 'Failed to load scenarios');
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load scenarios';
+      console.log("💥 [DEBUG] Catch Error:", err);
+      
+      // More detailed error logging
+      if (err instanceof Error) {
+        console.log("💥 [DEBUG] Error name:", err.name);
+        console.log("💥 [DEBUG] Error message:", err.message);
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Format scenarios untuk ditampilkan
+  const formatScenariosContent = (): string => {
+    if (scenarios.length === 0) {
+      return "No scenarios found for this project.";
+    }
+
+    let content = `Project: ${projectTitle}\n\n`;
+    content += `Generated Scenarios (${scenarios.length}):\n\n`;
+    
+    scenarios.forEach((scenario, index) => {
+      content += `=== Scenario ${index + 1} ===\n`;
+      content += `Type: ${scenario.scenario_type || 'N/A'}\n`;
+      content += `Title: ${scenario.title || 'N/A'}\n`;
+      content += `Domain: ${scenario.detected_domain || 'N/A'}\n`;
+      content += `Status: ${scenario.status || 'draft'}\n`;
+      content += `Structure: ${scenario.has_proper_structure ? 'Proper' : 'Needs Improvement'}\n`;
+      content += `Enhanced with LLM: ${scenario.enhanced_with_llm ? 'Yes' : 'No'}\n\n`;
+      
+      // Scenario text utama
+      content += `Scenario:\n${scenario.scenario_text}\n\n`;
+      
+      // Gherkin steps jika ada
+      if (scenario.gherkin_steps && scenario.gherkin_steps.length > 0) {
+        content += `Gherkin Steps:\n`;
+        scenario.gherkin_steps.forEach((step, stepIndex) => {
+          content += `${stepIndex + 1}. ${step}\n`;
+        });
+        content += `\n`;
+      }
+      
+      content += `---\n\n`;
+    });
+
+    return content;
+  };
+
+  const [content, setContent] = useState("");
+
+  // Update content ketika scenarios berubah
+  useEffect(() => {
+    if (scenarios.length > 0) {
+      setContent(formatScenariosContent());
+    } else {
+      setContent("No scenarios available. Please generate scenarios first.");
+    }
+  }, [scenarios, projectTitle]);
+
+  // Fungsi untuk generate scenarios baru - BERDASARKAN PROJECT
+  const handleGenerateNew = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      
+      if (!projectId) {
+        alert("No project ID provided");
+        return;
+      }
+      
+      console.log("🚀 [DEBUG] Generating new scenarios for project:", projectId);
+      const result = await scenarioService.generateProjectScenarios(projectId);
+      console.log("✅ [DEBUG] Generate result:", JSON.stringify(result, null, 2));
+      
+      if (result.success) {
+        alert(`✅ ${result.message}`);
+        
+        // Refresh scenarios setelah generate
+        await fetchProjectScenarios();
+      } else {
+        alert(`❌ Failed to generate scenarios: ${result.error}`);
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error generating scenarios';
+      console.log("💥 [DEBUG] Generate error:", err);
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAccept = async (): Promise<void> => {
+    try {
+      if (!projectId) {
+        alert("No project ID provided");
+        return;
+      }
+      
+      if (scenarios.length === 0) {
+        alert("No scenarios to accept");
+        return;
+      }
+      
+      const scenarioIds = scenarios.map(scenario => scenario.scenario_id);
+      console.log("✅ [DEBUG] Accepting scenarios:", scenarioIds);
+      
+      const result = await scenarioService.acceptProjectScenarios(projectId, scenarioIds);
+      console.log("✅ [DEBUG] Accept result:", JSON.stringify(result, null, 2));
+      
+      if (result.success) {
+        alert(`✅ ${result.message}`);
+        navigate("/PreviewFinal");
+      } else {
+        alert(`❌ Failed to accept scenarios: ${result.error}`);
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error accepting scenarios';
+      console.log("💥 [DEBUG] Accept error:", err);
+      alert(`Error: ${errorMessage}`);
+    }
+  };
+
+  const handleSaveEdit = async (): Promise<void> => {
+    try {
+      setIsEditing(false);
+      alert("✅ Edit mode disabled for now. Changes are local only.");
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error saving scenarios';
+      alert(errorMessage);
+    }
+  };
+
   const sendToAI = async () => {
     if (!aiInput.trim()) return;
     const msg = aiInput.trim();
     setAiMessages((m) => [...m, { role: "user", content: msg }]);
     setAiBusy(true);
 
-    // Dummy response (nanti bisa diganti dengan API beneran)
-    setTimeout(() => {
-      const response =
-        "AI Suggestion: mungkin tambahkan skenario validasi tambahan di akhir.";
-      setAiMessages((m) => [...m, { role: "assistant", content: response }]);
+    try {
+      setTimeout(() => {
+        const response =
+          "AI Suggestion: Consider adding validation scenarios for edge cases and error handling to improve test coverage.";
+        setAiMessages((m) => [...m, { role: "assistant", content: response }]);
+        setAiBusy(false);
+        setAiInput("");
+      }, 1000);
+    } catch (err) {
       setAiBusy(false);
-      setAiInput("");
-    }, 1000);
+      alert("Error connecting to AI service");
+    }
   };
 
   const applyLastSuggestion = () => {
@@ -111,6 +229,57 @@ Then sistem menyimpan perubahan dan menampilkan hasil akhir yang diperbarui
     setShowAI(false);
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-screen bg-[#f9fafb]">
+        <Header />
+        <main className="flex-1 px-6 py-10">
+          <div className="max-w-5xl mx-auto bg-white shadow-md rounded-xl p-6">
+            <div className="flex items-center justify-center h-64">
+              <div className="text-lg text-gray-600">Loading scenarios...</div>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex flex-col min-h-screen bg-[#f9fafb]">
+        <Header />
+        <main className="flex-1 px-6 py-10">
+          <div className="max-w-5xl mx-auto bg-white shadow-md rounded-xl p-6">
+            <div className="flex flex-col items-center justify-center h-64">
+              <div className="text-red-500 text-lg mb-4 text-center">
+                <div className="font-semibold">Error Loading Scenarios</div>
+                <div className="text-sm mt-2">{error}</div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={fetchProjectScenarios}
+                  className="rounded-lg bg-blue-500 px-6 py-2 text-white font-medium hover:bg-blue-600 transition"
+                >
+                  Try Again
+                </button>
+                <button
+                  onClick={handleGenerateNew}
+                  className="rounded-lg bg-green-500 px-6 py-2 text-white font-medium hover:bg-green-600 transition"
+                >
+                  Generate New
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-[#f9fafb]">
       <Header />
@@ -118,16 +287,48 @@ Then sistem menyimpan perubahan dan menampilkan hasil akhir yang diperbarui
       <main className="flex-1 px-6 py-10">
         <div className="max-w-5xl mx-auto bg-white shadow-md rounded-xl p-6">
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-semibold text-[#3E4766]">
-              User Story Scenario
-            </h1>
-            <button
-              onClick={() => setShowAI(true)}
-              className="rounded-lg bg-gradient-to-r from-[#5F3D89] to-[#4699DF] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-95"
-            >
-              Butuh bantuan AI?
-            </button>
+            <div>
+              <h1 className="text-2xl font-semibold text-[#3E4766]">
+                {projectTitle}
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Project ID: {projectId}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowAI(true)}
+                className="rounded-lg bg-gradient-to-r from-[#5F3D89] to-[#4699DF] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-95"
+              >
+                Butuh bantuan AI?
+              </button>
+              {scenarios.length > 0 && (
+                <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded">
+                  {scenarios.length} scenario{scenarios.length !== 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Info Panel */}
+          {scenarios.length > 0 && (
+            <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex flex-wrap gap-4 text-sm text-blue-800">
+                <div>
+                  <span className="font-medium">Total Scenarios:</span> {scenarios.length}
+                </div>
+                <div>
+                  <span className="font-medium">Main Scenarios:</span> {scenarios.filter(s => s.scenario_type === 'main_success').length}
+                </div>
+                <div>
+                  <span className="font-medium">Alternative:</span> {scenarios.filter(s => s.scenario_type === 'alternative').length}
+                </div>
+                <div>
+                  <span className="font-medium">Edge Cases:</span> {scenarios.filter(s => s.scenario_type === 'edge_case').length}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Editable Section */}
           {isEditing ? (
@@ -137,122 +338,132 @@ Then sistem menyimpan perubahan dan menampilkan hasil akhir yang diperbarui
               className="w-full h-[500px] border border-gray-300 rounded-lg p-4 text-gray-700 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#5561AA]"
             />
           ) : (
-            <div className="whitespace-pre-wrap text-gray-700 font-mono text-sm bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto">
-              {content}
+            <div className="whitespace-pre-wrap text-gray-700 font-mono text-sm bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto max-h-[500px]">
+              {content || "No scenarios available."}
             </div>
           )}
 
           {/* Buttons */}
-                <div className="flex justify-end gap-3 mt-6">
-                {!isEditing ? (
-                    <button
-                    onClick={() => setIsEditing(true)}
-                    className="rounded-lg px-5 py-2 font-medium
-                                text-[#5561AA] bg-white border-2 border-[#5561AA]
-                                hover:bg-gray-100 transition-colors shadow-sm"
-                    >
-                    Edit
-                    </button>
+          <div className="flex justify-between items-center mt-6">
+            <div className="flex gap-3">
+              <button
+                onClick={handleGenerateNew}
+                className="rounded-lg bg-gradient-to-r from-green-500 to-green-600 px-5 py-2 text-white font-medium shadow-sm hover:opacity-95"
+              >
+                Generate New
+              </button>
+            </div>
 
-                ) : (
-                    <button
-                    onClick={() => setIsEditing(false)}
-                    className="rounded-lg bg-gradient-to-r from-[#5561AA] to-[#4699DF] px-5 py-2 text-white font-medium shadow-sm hover:opacity-95"
-                    >
-                    Save
-                    </button>
-                )}
-
+            <div className="flex gap-3">
+              {!isEditing ? (
                 <button
-                    onClick={() => navigate("/PreviewFinal")}
-                    className="rounded-lg bg-gradient-to-r from-[#5F3D89] to-[#4699DF] px-5 py-2 text-white font-medium shadow-sm hover:opacity-95"
+                  onClick={() => setIsEditing(true)}
+                  className="rounded-lg px-5 py-2 font-medium
+                              text-[#5561AA] bg-white border-2 border-[#5561AA]
+                              hover:bg-gray-100 transition-colors shadow-sm"
                 >
-                    Accept
+                  Edit
                 </button>
-                </div>
+              ) : (
+                <button
+                  onClick={handleSaveEdit}
+                  className="rounded-lg bg-gradient-to-r from-[#5561AA] to-[#4699DF] px-5 py-2 text-white font-medium shadow-sm hover:opacity-95"
+                >
+                  Save
+                </button>
+              )}
 
+              <button
+                onClick={handleAccept}
+                disabled={scenarios.length === 0}
+                className="rounded-lg bg-gradient-to-r from-[#5F3D89] to-[#4699DF] px-5 py-2 text-white font-medium shadow-sm hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Accept {scenarios.length > 0 ? `(${scenarios.length})` : ''}
+              </button>
+            </div>
+          </div>
         </div>
       </main>
 
       {/* Popup Bantuan AI */}
-{showAI && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-    <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-800">Butuh bantuan AI?</h3>
-        <button
-          onClick={() => setShowAI(false)}
-          className="text-gray-500 hover:text-gray-700"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div className="mb-3">
-        <label className="mb-1 block text-sm font-medium text-gray-700">
-          Instruksi
-        </label>
-        <div className="flex gap-2">
-          <input
-            value={aiInput}
-            onChange={(e) => setAiInput(e.target.value)}
-            placeholder="Contoh: perbaiki grammar atau ringkas kalimat."
-            className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#5561AA]"
-          />
-          <button
-            onClick={sendToAI}
-            disabled={aiBusy}
-            className="rounded-lg bg-gradient-to-r from-[#5F3D89] to-[#4699DF] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-          >
-            {aiBusy ? "Memproses..." : "Kirim"}
-          </button>
-        </div>
-      </div>
-
-      <div className="mb-3 max-h-64 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-        {aiMessages.length === 0 ? (
-          <p className="text-gray-500">
-            Kirim instruksi untuk mendapatkan saran AI. Saran terakhir bisa diterapkan ke editor.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {aiMessages.map((m, i) => (
-              <li
-                key={i}
-                className={
-                  m.role === "user"
-                    ? "text-gray-800"
-                    : "text-green-700"
-                }
+      {showAI && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-800">Butuh bantuan AI?</h3>
+              <button
+                onClick={() => setShowAI(false)}
+                className="text-gray-500 hover:text-gray-700"
               >
-                <span className="mr-2 rounded bg-gray-100 px-2 py-0.5 text-xs">
-                  {m.role}
-                </span>
-                <span className="whitespace-pre-wrap">{m.content}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                ✕
+              </button>
+            </div>
 
-      <div className="flex items-center justify-end gap-3">
-        <button
-          onClick={() => setShowAI(false)}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-[#4699DF] hover:bg-gray-100"
-        >
-          Tutup
-        </button>
-        <button
-          onClick={applyLastSuggestion}
-          disabled={!aiMessages.some((m) => m.role === "assistant")}
-          className="rounded-lg bg-gradient-to-r from-[#5561AA] to-[#4699DF] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
-        >
-          Terapkan ke Editor
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+            <div className="mb-3">
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Instruksi
+              </label>
+              <div className="flex gap-2">
+                <input
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                  placeholder="Contoh: perbaiki grammar atau ringkas kalimat."
+                  className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#5561AA]"
+                />
+                <button
+                  onClick={sendToAI}
+                  disabled={aiBusy}
+                  className="rounded-lg bg-gradient-to-r from-[#5F3D89] to-[#4699DF] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {aiBusy ? "Memproses..." : "Kirim"}
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-3 max-h-64 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              {aiMessages.length === 0 ? (
+                <p className="text-gray-500">
+                  Kirim instruksi untuk mendapatkan saran AI. Saran terakhir bisa diterapkan ke editor.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {aiMessages.map((m, i) => (
+                    <li
+                      key={i}
+                      className={
+                        m.role === "user"
+                          ? "text-gray-800"
+                          : "text-green-700"
+                      }
+                    >
+                      <span className="mr-2 rounded bg-gray-100 px-2 py-0.5 text-xs">
+                        {m.role}
+                      </span>
+                      <span className="whitespace-pre-wrap">{m.content}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowAI(false)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-[#4699DF] hover:bg-gray-100"
+              >
+                Tutup
+              </button>
+              <button
+                onClick={applyLastSuggestion}
+                disabled={!aiMessages.some((m) => m.role === "assistant")}
+                className="rounded-lg bg-gradient-to-r from-[#5561AA] to-[#4699DF] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+              >
+                Terapkan ke Editor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <Footer />
     </div>
   );
