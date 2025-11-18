@@ -322,7 +322,7 @@ def generate_user_stories(request, project_id):
             }, status=400)
         
         # Initialize generator
-        from stories.services.user_story_generator import UserStoryGenerator
+        from stories.utils.user_story_generator import UserStoryGenerator
         generator = UserStoryGenerator()
         
         # Generate stories

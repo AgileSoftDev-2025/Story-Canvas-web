@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path, include
+
 from stories.views.project_description import (
     get_projects,
     get_project,
@@ -37,7 +38,6 @@ from stories.views.user_story import (
     get_project_user_stories,
     get_user_stories_by_status,
     get_user_stories_by_priority,
-    generate_user_stories
 )
 
 from stories.views.scenario import (
@@ -78,10 +78,29 @@ from stories.views.auth.token_auth import (
     current_user,
     signout,
     refresh_token,
-
 )
 
-from stories.views.auth.auth_debug import debug_signin
+from stories.views.auth.auth_debug import (
+    debug_signin,
+)
+
+from stories.generation_views import (
+    get_rag_status,
+    query_rag_patterns,
+    query_ui_patterns,
+    generate_user_stories,
+    generate_wireframes,
+    generate_scenarios,
+    export_all_artifacts,
+    ai_edit_user_stories,
+    generate_story_scenarios,
+    ai_edit_user_story,
+    ai_edit_story_scenarios,
+    generate_creole,
+    generate_salt_diagram,
+    render_png_diagram,
+    ai_edit_wireframe
+)
 
 
 urlpatterns = [
@@ -125,7 +144,6 @@ urlpatterns = [
     path('projects/<str:project_id>/update/', update_project, name='update_project'),
     path('projects/<str:project_id>/delete/', delete_project, name='delete_project'),
     path('projects/<str:project_id>/stats/', get_project_stats, name='get_project_stats'),
-    path('projects/<str:project_id>/generate-user-stories/', generate_user_stories, name='generate_user_stories'),
 
 
       # Project wireframes
@@ -187,36 +205,35 @@ urlpatterns = [
     path('projects/<str:project_id>/export-preview/', preview_project_export, name='preview-project-export'),
     path('projects/<str:project_id>/generate-export-preview/', generate_export_preview, name='generate-export-preview'),
     path('exports/my-exports/', list_user_exports, name='list-user-exports'),
-       # Scenario endpoints
+    
+    # Scenario endpoints
     path('stories/<uuid:story_id>/scenarios/', get_story_scenarios, name='get_story_scenarios'),
     path('projects/<uuid:project_id>/scenarios/', get_project_scenarios, name='get_project_scenarios'),
     path('stories/<uuid:story_id>/scenarios/create/', create_scenario, name='create_scenario_for_story'),
     path('projects/<uuid:project_id>/scenarios/create/', create_scenario, name='create_scenario_for_project'),
     path('scenarios/<uuid:scenario_id>/update/', update_scenario, name='update_scenario'),
     path('scenarios/<uuid:scenario_id>/delete/', delete_scenario, name='delete_scenario'),
-]
 
+     # RAG endpoints
+    path('rag/status/', get_rag_status, name='get_rag_status'),
+    path('rag/query-patterns/', query_rag_patterns, name='query_rag_patterns'),
+    path('rag/query-ui-patterns/', query_ui_patterns, name='query_ui_patterns'),
 
-# stories/urls.py
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import ProjectViewSet, UserStoryViewSet, GenerationSessionViewSet, RAGAPIView
+    # Project generation endpoints
+    path('projects/<str:project_id>/generate-user-stories/', generate_user_stories, name='generate_user_stories'),
+    path('projects/<str:project_id>/generate-wireframes/', generate_wireframes, name='generate_wireframes'),
+    path('projects/<str:project_id>/generate-scenarios/', generate_scenarios, name='generate_scenarios'),
+    path('projects/<str:project_id>/export-all-artifacts/', export_all_artifacts, name='export_all_artifacts'),
+    path('projects/<str:project_id>/ai-edit-user-stories/', ai_edit_user_stories, name='ai_edit_user_stories'),
 
-router = DefaultRouter()
-router.register(r'projects', ProjectViewSet)
-router.register(r'user-stories', UserStoryViewSet)
-router.register(r'generation-sessions', GenerationSessionViewSet)
-router.register(r'rag', RAGAPIView, basename='rag')
+    # User story generation endpoints
+    path('user-stories/<str:story_id>/generate-scenarios/', generate_story_scenarios, name='generate_story_scenarios'),
+    path('user-stories/<str:story_id>/ai-edit/', ai_edit_user_story, name='ai_edit_user_story'),
+    path('user-stories/<str:story_id>/ai-edit-scenarios/', ai_edit_story_scenarios, name='ai_edit_story_scenarios'),
 
-urlpatterns = [
-    path('api/', include(router.urls)),
-]
-
-# stories/urls.py (project level)
-from django.contrib import admin
-from django.urls import path, include
-
-urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('', include('stories.urls'))
+    # Wireframe generation endpoints
+    path('wireframes/<str:wireframe_id>/generate-creole/', generate_creole, name='generate_creole'),
+    path('wireframes/<str:wireframe_id>/generate-salt-diagram/', generate_salt_diagram, name='generate_salt_diagram'),
+    path('wireframes/<str:wireframe_id>/render-png-diagram/', render_png_diagram, name='render_png_diagram'),
+    path('wireframes/<str:wireframe_id>/ai-edit/', ai_edit_wireframe, name='ai_edit_wireframe'),
 ]

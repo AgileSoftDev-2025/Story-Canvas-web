@@ -113,15 +113,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # RAG & AI CONFIGURATION
 # ============================
 
-# RAG Vector Database Path
-CHROMA_DB_PATH = os.path.join(BASE_DIR, 'project_rag_store')
-
-# Create RAG directory if not exists
-os.makedirs(CHROMA_DB_PATH, exist_ok=True)
-
-# AI Model Configuration
-MODEL_ID = "ibm-granite/granite-3.3-8b-instruct"
-REPLICATE_API_TOKEN = os.getenv('REPLICATE_API_TOKEN', 'your_replicate_api_token_here')
+# RAG Configuration
+CHROMA_PATH = os.getenv('CHROMA_PATH', './project_rag_store')
+MODEL_ID = os.getenv('MODEL_ID', 'ibm-granite/granite-3.3-8b-instruct')
+EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
+REPLICATE_API_TOKEN = os.getenv('REPLICATE_API_TOKEN')
 
 # ============================
 # REST FRAMEWORK CONFIGURATION
