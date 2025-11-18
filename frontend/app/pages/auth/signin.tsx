@@ -2,9 +2,12 @@ import React, { useState } from "react";
 import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 export default function SignIn() {
   const navigate = useNavigate();
+  const { login } = useAuth(); // ✅ Gunakan login dari context
+  
   const [formData, setFormData] = useState({
     username: "",
     password: ""
@@ -12,7 +15,6 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -22,7 +24,6 @@ export default function SignIn() {
     if (error) setError("");
   };
 
-  // ✅ Validasi form
   const validateForm = () => {
     if (!formData.username || !formData.password) {
       return "Username and password are required";
@@ -33,7 +34,6 @@ export default function SignIn() {
     return null;
   };
 
-  // ✅ Fungsi handle login dengan backend integration
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -62,7 +62,6 @@ export default function SignIn() {
 
       console.log("📨 Response status:", response.status);
       
-      // Cek content type sebelum parse
       const contentType = response.headers.get("content-type");
       console.log("📨 Content-Type:", contentType);
       
@@ -77,23 +76,19 @@ export default function SignIn() {
         return;
       }
 
-      // ✅ Handle response
+      // ✅ Handle response dengan auth context
       if (response.ok && data.success) {
         console.log("✅ Login successful!");
         
-        // Simpan tokens dan user data
-        localStorage.setItem("access_token", data.tokens.access);
-        localStorage.setItem("refresh_token", data.tokens.refresh);
-        localStorage.setItem("user", JSON.stringify(data.user));
+        // ✅ Gunakan login function dari context
+        login(data.tokens, data.user);
         
-        console.log("💾 Data saved to localStorage");
-        console.log("🔄 Redirecting to dashboard...");
+        console.log("💾 Data saved via AuthContext");
+        console.log("🔄 Redirecting to home...");
         
-        // Redirect ke dashboard
         navigate("/");
       } else {
         console.log("❌ Login failed");
-        // Handle error
         let errorMessage = "Login failed";
         if (data.error) {
           errorMessage = data.error;
@@ -110,7 +105,6 @@ export default function SignIn() {
     }
   };
 
-  // Fungsi untuk langsung ke Sign Up
   const handleSignUpRedirect = () => {
     navigate("/signup");
   };
