@@ -2,9 +2,12 @@ import React, { useState } from "react";
 import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext"; // ✅ Import auth context
 
 export default function SignUp() {
   const navigate = useNavigate();
+  const { login } = useAuth(); // ✅ Gunakan auth context
+  
   const [formData, setFormData] = useState({
     email: "",
     username: "",
@@ -13,6 +16,11 @@ export default function SignUp() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({
+    email: "",
+    username: "",
+    password: ""
+  });
 
   // ✅ Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -21,115 +29,162 @@ export default function SignUp() {
       ...prev,
       [name]: value
     }));
+    
+    // Clear errors when user starts typing
     if (error) setError("");
+    if (fieldErrors[name as keyof typeof fieldErrors]) {
+      setFieldErrors(prev => ({
+        ...prev,
+        [name]: ""
+      }));
+    }
   };
 
   // ✅ Validasi form
   const validateForm = () => {
-    if (!formData.email || !formData.username || !formData.password) {
-      return "All fields are required";
+    const errors = {
+      email: "",
+      username: "",
+      password: ""
+    };
+
+    if (!formData.email) {
+      errors.email = "Email is required";
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = "Please enter a valid email address";
     }
-    if (formData.password.length < 6) {
-      return "Password must be at least 6 characters long";
+
+    if (!formData.username) {
+      errors.username = "Username is required";
+    } else if (formData.username.length < 3) {
+      errors.username = "Username must be at least 3 characters long";
     }
+
+    if (!formData.password) {
+      errors.password = "Password is required";
+    } else if (formData.password.length < 6) {
+      errors.password = "Password must be at least 6 characters long";
+    }
+
     if (formData.password !== formData.passwordConfirmation) {
-      return "Passwords do not match";
+      errors.password = "Passwords do not match";
     }
-    if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      return "Please enter a valid email address";
-    }
-    return null;
+
+    setFieldErrors(errors);
+
+    // Check if there are any errors
+    return Object.values(errors).some(error => error !== "");
   };
 
-  // ✅ ✅ ✅ PERBAIKAN: Fixed handleSignUp function
+  // ✅ Extract specific field errors from backend response
+  const extractFieldErrors = (errors: any) => {
+    const fieldErrors = {
+      email: "",
+      username: "",
+      password: ""
+    };
+
+    if (errors.email) {
+      if (Array.isArray(errors.email)) {
+        fieldErrors.email = errors.email[0];
+      } else if (typeof errors.email === 'string') {
+        fieldErrors.email = errors.email;
+      } else if (errors.email.includes('already exists')) {
+        fieldErrors.email = "Email has already been used";
+      }
+    }
+
+    if (errors.username) {
+      if (Array.isArray(errors.username)) {
+        fieldErrors.username = errors.username[0];
+      } else if (typeof errors.username === 'string') {
+        fieldErrors.username = errors.username;
+      } else if (errors.username.includes('already exists')) {
+        fieldErrors.username = "Username has already been used";
+      }
+    }
+
+    if (errors.password) {
+      if (Array.isArray(errors.password)) {
+        fieldErrors.password = errors.password[0];
+      } else if (typeof errors.password === 'string') {
+        fieldErrors.password = errors.password;
+      }
+    }
+
+    return fieldErrors;
+  };
+
+  // ✅ Handle Sign Up
   const handleSignUp = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  const validationError = validateForm();
-  if (validationError) {
-    setError(validationError);
-    return;
-  }
-
-  setLoading(true);
-  setError("");
-
-  try {
-    console.log("🔄 [1] Sending signup request...");
+    e.preventDefault();
     
-    const response = await fetch("http://127.0.0.1:8000/api/auth/signup/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: formData.email,
-        username: formData.username,
-        password: formData.password,
-        password_confirm: formData.passwordConfirmation,
-      }),
-    });
-
-    console.log("📨 [2] Response status:", response.status);
-    console.log("📨 [3] Response headers:", Object.fromEntries(response.headers.entries()));
-    
-    // ✅ Cek content type sebelum parse
-    const contentType = response.headers.get("content-type");
-    console.log("📨 [4] Content-Type:", contentType);
-    
-    let data;
-    if (contentType && contentType.includes("application/json")) {
-      data = await response.json();
-      console.log("📨 [5] JSON data:", data);
-    } else {
-      const text = await response.text();
-      console.log("📨 [5] Raw text response:", text);
-      setError("Server returned non-JSON response");
+    // Validasi client-side
+    if (validateForm()) {
       return;
     }
 
-    console.log("🔍 [6] Checking response data...");
-    console.log("🔍 [7] data.success:", data.success);
-    console.log("🔍 [8] data.tokens:", data.tokens);
-    console.log("🔍 [9] data.user:", data.user);
+    setLoading(true);
+    setError("");
+    setFieldErrors({ email: "", username: "", password: "" });
 
-    // ✅ CHECK YANG LEBIH ROBUST
-    if (response.status === 201 && data.success === true) {
-      console.log("✅ [10] Registration successful!");
+    try {
+      console.log("🔄 Sending signup request...");
       
-      if (data.tokens && data.tokens.access) {
-        localStorage.setItem("access_token", data.tokens.access);
-        localStorage.setItem("refresh_token", data.tokens.refresh);
-        localStorage.setItem("user", JSON.stringify(data.user));
+      const response = await fetch("http://127.0.0.1:8000/api/auth/signup/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          username: formData.username,
+          password: formData.password,
+          password_confirm: formData.passwordConfirmation,
+        }),
+      });
+
+      console.log("📨 Response status:", response.status);
+      
+      const data = await response.json();
+      console.log("📨 Response data:", data);
+
+      // ✅ Handle response
+      if (response.status === 201 && data.success) {
+        console.log("✅ Registration successful!");
         
-        console.log("💾 [11] Data saved to localStorage");
-        console.log("🔄 [12] Redirecting to dashboard...");
+        // ✅ Gunakan login function dari context
+        login(data.tokens, data.user);
         
-        navigate("/Signin");
+        console.log("💾 Data saved via AuthContext");
+        console.log("🔄 Redirecting to home...");
+        
+        navigate("/");
       } else {
-        console.log("❌ [13] Missing tokens in response");
-        setError("Registration successful but missing tokens");
+        console.log("❌ Registration failed");
+        
+        // ✅ Handle field-specific errors from backend
+        if (data.errors) {
+          const extractedErrors = extractFieldErrors(data.errors);
+          setFieldErrors(extractedErrors);
+          
+          // Also show general error if no specific field errors
+          if (!Object.values(extractedErrors).some(error => error !== "")) {
+            setError("Registration failed. Please check your input.");
+          }
+        } else if (data.error) {
+          setError(data.error);
+        } else {
+          setError("Registration failed");
+        }
       }
-    } else {
-      console.log("❌ [14] Registration failed");
-      console.log("❌ [15] data.error:", data.error);
-      console.log("❌ [16] data.errors:", data.errors);
-      
-      let errorMessage = "Registration failed";
-      if (data.errors) {
-        errorMessage = Object.values(data.errors).flat().join(', ');
-      } else if (data.error) {
-        errorMessage = data.error;
-      }
-      setError(errorMessage);
+    } catch (err) {
+      console.error("🚨 SignUp network error:", err);
+      setError("Network error. Please check if server is running.");
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error("🚨 [17] SignUp network error:", err);
-    setError("Network error. Please check if server is running.");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Fungsi untuk langsung ke Sign In
   const handleSignInRedirect = () => {
@@ -159,7 +214,7 @@ export default function SignUp() {
             <h2 className="text-secondary font-bold text-2xl mb-2">StoryCanvas</h2>
             <h3 className="text-primary font-bold text-3xl mb-8">Sign Up</h3>
 
-            {/* Error Message */}
+            {/* General Error Message */}
             {error && (
               <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
                 {error}
@@ -167,7 +222,7 @@ export default function SignUp() {
             )}
 
             {/* ✅ Form dengan handler */}
-            <form onSubmit={handleSignUp} className="flex flex-col space-y-6">
+            <form onSubmit={handleSignUp} className="flex flex-col space-y-4">
               {/* Email */}
               <div>
                 <label className="block text-primary mb-2 font-medium">Email</label>
@@ -177,9 +232,16 @@ export default function SignUp() {
                   value={formData.email}
                   onChange={handleInputChange}
                   placeholder="Enter Your Email"
-                  className="w-full px-4 py-3 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                    fieldErrors.email 
+                      ? "border-red-400 focus:ring-red-400" 
+                      : "border-primary-200 focus:ring-primary-400"
+                  }`}
                   required
                 />
+                {fieldErrors.email && (
+                  <p className="text-red-500 text-sm mt-1">{fieldErrors.email}</p>
+                )}
               </div>
 
               {/* Username */}
@@ -191,9 +253,16 @@ export default function SignUp() {
                   value={formData.username}
                   onChange={handleInputChange}
                   placeholder="Enter Your Username"
-                  className="w-full px-4 py-3 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                    fieldErrors.username 
+                      ? "border-red-400 focus:ring-red-400" 
+                      : "border-primary-200 focus:ring-primary-400"
+                  }`}
                   required
                 />
+                {fieldErrors.username && (
+                  <p className="text-red-500 text-sm mt-1">{fieldErrors.username}</p>
+                )}
               </div>
 
               {/* Password */}
@@ -205,10 +274,17 @@ export default function SignUp() {
                   value={formData.password}
                   onChange={handleInputChange}
                   placeholder="Enter Your Password (min. 6 characters)"
-                  className="w-full px-4 py-3 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                    fieldErrors.password 
+                      ? "border-red-400 focus:ring-red-400" 
+                      : "border-primary-200 focus:ring-primary-400"
+                  }`}
                   required
                   minLength={6}
                 />
+                {fieldErrors.password && (
+                  <p className="text-red-500 text-sm mt-1">{fieldErrors.password}</p>
+                )}
               </div>
 
               {/* Password Confirmation */}
@@ -229,7 +305,7 @@ export default function SignUp() {
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full py-3 bg-primary text-white font-bold rounded-full transition hover-lift ${
+                className={`w-full py-3 bg-primary text-white font-bold rounded-full transition hover-lift mt-4 ${
                   loading 
                     ? "opacity-50 cursor-not-allowed" 
                     : "hover:bg-primary-500"
