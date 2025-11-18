@@ -85,33 +85,47 @@ def signin(request):
     Sign in endpoint - PUBLIC
     POST /api/auth/signin/
     """
+    # ✅ HANDLE OPTIONS REQUEST UNTUK CORS
+    if request.method == 'OPTIONS':
+        response = JsonResponse({'success': True})
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
     print("=== SIGNIN CALLED ===")
     
     if request.method != 'POST':
-        return JsonResponse({
+        response = JsonResponse({
             'success': False,
             'error': 'Only POST method allowed'
         }, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH CORS HEADER
+        return response
 
     try:
         data = json.loads(request.body.decode('utf-8'))
         print("Signin data:", data)
     except json.JSONDecodeError as e:
         print("JSON error:", e)
-        return JsonResponse({
+        response = JsonResponse({
             'success': False, 
             'error': 'Invalid JSON'
         }, status=status.HTTP_400_BAD_REQUEST)
+        response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH CORS HEADER
+        return response
 
     username = data.get('username')
     password = data.get('password')
 
     # Basic validation
     if not username or not password:
-        return JsonResponse({
+        response = JsonResponse({
             'success': False,
             'error': 'Username and password are required'
         }, status=status.HTTP_400_BAD_REQUEST)
+        response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH CORS HEADER
+        return response
 
     try:
         # Manual authentication without serializer
@@ -127,7 +141,7 @@ def signin(request):
             # Update last login
             user.save()
             
-            return JsonResponse({
+            response = JsonResponse({
                 'success': True, 
                 'message': 'Signed in successfully',
                 'user': {
@@ -140,25 +154,33 @@ def signin(request):
                     'refresh': str(refresh)
                 }
             }, status=status.HTTP_200_OK)
+            response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH CORS HEADER
+            return response
         else:
             print("Password incorrect")
-            return JsonResponse({
+            response = JsonResponse({
                 'success': False, 
                 'error': 'Invalid credentials'
             }, status=status.HTTP_401_UNAUTHORIZED)
+            response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH CORS HEADER
+            return response
             
     except CustomUser.DoesNotExist:
         print("User not found")
-        return JsonResponse({
+        response = JsonResponse({
             'success': False, 
             'error': 'Invalid credentials'
         }, status=status.HTTP_401_UNAUTHORIZED)
+        response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH CORS HEADER
+        return response
     except Exception as e:
         print("Unexpected error:", e)
-        return JsonResponse({
+        response = JsonResponse({
             'success': False, 
             'error': f'Server error: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH CORS HEADER
+        return response
 
 @csrf_exempt
 def refresh_token(request):
