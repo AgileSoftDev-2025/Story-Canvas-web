@@ -1,17 +1,21 @@
 import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
-import { RequireLoginPopup } from "./popup"; // ✅ Import popup
+import { NavLink, useNavigate } from "react-router-dom";
+import { RequireLoginPopup } from "./popup";
+import { useAuth } from "../context/AuthContext";
 
 export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false); // sementara manual
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [showPopup, setShowPopup] = useState(false); // ✅ kontrol popup
+  const [showPopup, setShowPopup] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const userName = "Betari Safira";
-
+  // ✅ Urutan yang benar: Home - Chat - History - About
   const navLinks = [
     { name: "Home", path: "/" },
+    { name: "Chat", path: "/chat" },
     { name: "About", path: "/about" },
   ];
 
@@ -20,16 +24,25 @@ export function Header() {
     { name: "SignUp", path: "/Signup" },
   ];
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setMenuOpen(false);
-    setDropdownOpen(false);
+  const handleLogout = async () => {
+    setLogoutLoading(true);
+    try {
+      await logout();
+      setMenuOpen(false);
+      setDropdownOpen(false);
+      console.log("✅ Logout successful, redirecting to home...");
+      navigate("/");
+    } catch (error) {
+      console.error("❌ Logout error:", error);
+    } finally {
+      setLogoutLoading(false);
+    }
   };
 
   const handleHistoryClick = (e: React.MouseEvent) => {
-    if (!isLoggedIn) {
-      e.preventDefault(); // cegah routing
-      setShowPopup(true); // tampilkan popup
+    if (!isAuthenticated) {
+      e.preventDefault();
+      setShowPopup(true);
     }
   };
 
@@ -45,24 +58,22 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
-            {navLinks.map((link) => (
-              <NavLink
-                key={link.name}
-                to={link.path}
-                end
-                className={({ isActive }) =>
-                  `transition ${
-                    isActive
-                      ? "opacity-100 border-b-2 border-white"
-                      : "opacity-80 hover:opacity-100"
-                  }`
-                }
-              >
-                {link.name}
-              </NavLink>
-            ))}
+            {/* ✅ Home */}
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                `transition ${
+                  isActive
+                    ? "opacity-100 border-b-2 border-white"
+                    : "opacity-80 hover:opacity-100"
+                }`
+              }
+            >
+              Home
+            </NavLink>
 
-            {/* Chat */}
+            {/* ✅ Chat */}
             <NavLink
               to="/chat"
               end
@@ -77,11 +88,36 @@ export function Header() {
               Chat
             </NavLink>
 
-            {/* ✅ History tetap muncul, tapi cek login */}
+            {/* ✅ History - Hilangkan underline ketika belum login */}
+            {!isAuthenticated ? (
+              // ✅ Ketika belum login - tanpa underline dan dengan hover effect
+              <button
+                onClick={handleHistoryClick}
+                className="opacity-80 hover:opacity-100 transition cursor-pointer"
+              >
+                History
+              </button>
+            ) : (
+              // ✅ Ketika sudah login - normal NavLink dengan underline aktif
+              <NavLink
+                to="/history"
+                end
+                className={({ isActive }) =>
+                  `transition ${
+                    isActive
+                      ? "opacity-100 border-b-2 border-white"
+                      : "opacity-80 hover:opacity-100"
+                  }`
+                }
+              >
+                History
+              </NavLink>
+            )}
+
+            {/* ✅ About */}
             <NavLink
-              to={isLoggedIn ? "/history" : "#"}
+              to="/about"
               end
-              onClick={handleHistoryClick}
               className={({ isActive }) =>
                 `transition ${
                   isActive
@@ -90,11 +126,11 @@ export function Header() {
                 }`
               }
             >
-              History
+              About
             </NavLink>
 
-            {/* Auth Section */}
-            {!isLoggedIn ? (
+            {/* ✅ Auth Section dengan real auth state */}
+            {!isAuthenticated ? (
               <div className="flex items-center space-x-4">
                 {authLinks.map((link) => (
                   <NavLink
@@ -120,16 +156,21 @@ export function Header() {
                   >
                     <path d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,1,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,1,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z" />
                   </svg>
-                  <span>{userName}</span>
+                  <span>{user?.username || "User"}</span>
                 </button>
 
                 {dropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white text-gray-800 rounded-lg shadow-lg z-50">
                     <button
                       onClick={handleLogout}
-                      className="w-full text-left px-4 py-3 hover:bg-gray-100 transition rounded-lg"
+                      disabled={logoutLoading}
+                      className={`w-full text-left px-4 py-3 transition rounded-lg ${
+                        logoutLoading 
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                          : "hover:bg-gray-100"
+                      }`}
                     >
-                      Log Out
+                      {logoutLoading ? "Logging out..." : "Log Out"}
                     </button>
                   </div>
                 )}
