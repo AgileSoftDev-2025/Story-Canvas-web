@@ -4,7 +4,7 @@ import { RequireLoginPopup } from "./popup"; // ✅ Import popup
 
 export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(true); // sementara manual
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // sementara manual
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showPopup, setShowPopup] = useState(false); // ✅ kontrol popup
 

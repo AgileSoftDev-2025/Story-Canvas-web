@@ -9,40 +9,52 @@ from stories.serializers.auth_serializers import RegisterSerializer, LoginSerial
 from stories.decorators.jwt_decorator import jwt_token
 from stories.models import CustomUser 
 
-
 @csrf_exempt
 def signup(request):
     """
     User registration endpoint - PUBLIC
     POST /api/auth/signup/
     """
+    
+    # ✅ HANDLE OPTIONS REQUEST
+    if request.method == 'OPTIONS':
+        response = JsonResponse({'success': True})
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
     print("=== SIGNUP CALLED ===")
     
     if request.method != 'POST':
-        return JsonResponse({
+        response = JsonResponse({
             'success': False,
             'error': 'Only POST method allowed'
         }, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH INI
+        return response
 
     try:
         data = json.loads(request.body.decode('utf-8'))
-        print("Signup data:", data)
+        print("Signup data received:", data)
+        
     except json.JSONDecodeError as e:
         print("JSON error:", e)
-        return JsonResponse({
+        response = JsonResponse({
             'success': False, 
             'error': 'Invalid JSON'
         }, status=status.HTTP_400_BAD_REQUEST)
+        response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH INI
+        return response
 
     serializer = RegisterSerializer(data=data)
     if serializer.is_valid():
         user = serializer.save()
         print("User created:", user.username)
         
-        # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
         
-        return JsonResponse({
+        response = JsonResponse({
             'success': True, 
             'message': 'User registered successfully!',
             'user': {
@@ -55,14 +67,18 @@ def signup(request):
                 'refresh': str(refresh)
             }
         }, status=status.HTTP_201_CREATED)
+        response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH INI
+        return response
     else:
         print("Serializer errors:", serializer.errors)
+        response = JsonResponse({
+            'success': False, 
+            'error': 'Validation failed',
+            'errors': serializer.errors,
+        }, status=status.HTTP_400_BAD_REQUEST)
+        response['Access-Control-Allow-Origin'] = '*'  # ✅ TAMBAH INI
+        return response
     
-    return JsonResponse({
-        'success': False, 
-        'errors': serializer.errors
-    }, status=status.HTTP_400_BAD_REQUEST)
-
 @csrf_exempt
 def signin(request):
     """
