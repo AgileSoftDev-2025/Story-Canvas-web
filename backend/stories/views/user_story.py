@@ -12,7 +12,6 @@ from stories.serializers.user_story_serializer import (
 def get_user_stories(request):
     """
     Get all user stories with filtering options
-    GET /api/user-stories/?project_id=<project_id>&status=<status>&priority=<priority>
     """
     try:
         project_id = request.GET.get('project_id')
@@ -34,12 +33,7 @@ def get_user_stories(request):
         return JsonResponse({
             'success': True,
             'data': data,
-            'count': len(data),
-            'filters': {
-                'project_id': project_id,
-                'status': status,
-                'priority': priority
-            }
+            'count': len(data)
         }, status=200)
         
     except Exception as e:
@@ -52,7 +46,6 @@ def get_user_stories(request):
 def get_user_story_detail(request, story_id):
     """
     Get user story detail by story_id
-    GET /api/user-stories/{story_id}/
     """
     try:
         user_story = UserStory.objects.select_related('project').get(story_id=story_id)
@@ -78,7 +71,6 @@ def get_user_story_detail(request, story_id):
 def create_user_story(request):
     """
     Create new user story
-    POST /api/user-stories/
     """
     try:
         data = json.loads(request.body)
@@ -136,7 +128,6 @@ def create_user_story(request):
 def update_user_story(request, story_id):
     """
     Update user story
-    PUT /api/user-stories/{story_id}/
     """
     try:
         user_story = UserStory.objects.get(story_id=story_id)
@@ -180,7 +171,6 @@ def update_user_story(request, story_id):
 def delete_user_story(request, story_id):
     """
     Delete user story
-    DELETE /api/user-stories/{story_id}/
     """
     try:
         user_story = UserStory.objects.get(story_id=story_id)
@@ -206,7 +196,6 @@ def delete_user_story(request, story_id):
 def get_project_user_stories(request, project_id):
     """
     Get all user stories for a specific project
-    GET /api/projects/{project_id}/user-stories/
     """
     try:
         # Check if project exists
@@ -249,7 +238,6 @@ def get_project_user_stories(request, project_id):
 def get_user_stories_by_status(request, status):
     """
     Get user stories by status
-    GET /api/user-stories/status/{status}/
     """
     try:
         valid_statuses = [choice[0] for choice in UserStory.STATUS_CHOICES]
@@ -279,7 +267,6 @@ def get_user_stories_by_status(request, status):
 def get_user_stories_by_priority(request, priority):
     """
     Get user stories by priority
-    GET /api/user-stories/priority/{priority}/
     """
     try:
         valid_priorities = [choice[0] for choice in UserStory.PRIORITY_CHOICES]
