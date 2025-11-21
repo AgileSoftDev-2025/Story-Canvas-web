@@ -733,8 +733,6 @@ class WireframeGenerator:
         """Call LLM API using Django settings"""
         try:
             api_token = os.getenv('REPLICATE_API_TOKEN')
-            if not api_token or api_token == 'r8_TJPzTD1NK34lNfVAm1g4aF0j8pXAzJY3fHcPp':
-                raise Exception("Replicate API token not configured")
             
             client = replicate.Client(api_token=api_token)
             
