@@ -1144,7 +1144,7 @@ class ScenarioGenerator:
         """Call the LLM API dengan error handling yang lebih baik - EXACT SAME AS COLAB"""
         try:
             api_token = os.getenv('REPLICATE_API_TOKEN')
-            if not api_token or api_token == 'your_replicate_api_token_here':
+            if not api_token or api_token == 'r8_TJPzTD1NK34lNfVAm1g4aF0j8pXAzJY3fHcPp':
                 print("⚠️ Replicate API token not configured. Using fallback scenarios.")
                 return self._fallback_llm_response(prompt)
             

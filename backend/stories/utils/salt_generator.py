@@ -3,7 +3,8 @@ import zlib
 import base64
 import os
 import requests
-from typing import Optional
+from typing import List, Optional, Dict, Any
+from pathlib import Path
 
 # PlantUML Alphabet - EXACT SAME AS COLAB
 PLANTUML_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
@@ -109,6 +110,7 @@ def render_plantuml_png(salt_code: str, output_file: Optional[str] = None) -> st
                 os.makedirs(os.path.dirname(output_file), exist_ok=True)
                 with open(output_file, "wb") as f:
                     f.write(response.content)
+                print(f"✅ PNG saved: {output_file}")
                 return output_file
             else:
                 raise RuntimeError(f"Failed to render PlantUML. Status: {response.status_code}")
@@ -126,22 +128,20 @@ def render_plantuml_png(salt_code: str, output_file: Optional[str] = None) -> st
 
 def display_plantuml_diagrams_png(plantuml_code_dict: dict):
     """
-    Display PlantUML diagrams as PNG images inside a notebook (if IPython available).
-    EXACT SAME AS COLAB
+    Display PlantUML diagrams as URLs (Django-compatible version).
+    EXACT SAME FUNCTIONALITY AS COLAB but without IPython dependency
     """
+    print("\n" + "="*60)
+    print("PLANTUML DIAGRAM URLs")
+    print("="*60)
+    
     for name, code in plantuml_code_dict.items():
+        url = plantuml_url(code)
         print(f"\n📊 {name.replace('_', ' ').title()}:")
-        png_data = render_plantuml_png(code)
-
-        if png_data:
-            try:
-                from IPython.display import Image, display
-                display(Image(data=png_data, format='png', width=600))
-            except ImportError:
-                url = f"http://www.plantuml.com/plantuml/png/{plantuml_encode(code)}"
-                print(f"🌍 View diagram at: {url}")
-        else:
-            print("⚠️ Failed to generate PNG image")
+        print(f"🌍 View diagram at: {url}")
+        
+        # Try to provide a simple ASCII preview for terminal
+        print("   📝 Preview: [Salt UML Diagram - Open URL above to view]")
 
 def safe_filename(name: str) -> str:
     """Sanitize role/page names for filesystem use - EXACT SAME AS COLAB"""
@@ -153,25 +153,28 @@ def save_plantuml_files(documentation: dict, base_dir: str = None):
     Produces .puml files and live preview URLs.
     EXACT SAME AS COLAB
     """
+    from datetime import datetime
 
     # Base dir with timestamp
     if base_dir is None:
-        from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_dir = f"docs_{safe_filename(documentation['title'])}_{timestamp}"
+        project_title = documentation.get('title', 'project')
+        base_dir = f"docs_{safe_filename(project_title)}_{timestamp}"
+    
     os.makedirs(base_dir, exist_ok=True)
 
     puml_dir = os.path.join(base_dir, "puml")
     os.makedirs(puml_dir, exist_ok=True)
 
     # Loop through every wireframe
-    for role, creole_body in documentation["salt_wireframes"].items():
+    for role, creole_body in documentation.get("salt_wireframes", {}).items():
         # Wrap Salt in PlantUML
         salt_code = wrap_salt_block(role, creole_body)
 
         # Save as .puml
         filename = safe_filename(role) + ".puml"
         filepath = os.path.join(puml_dir, filename)
+        
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(salt_code)
 
@@ -180,29 +183,34 @@ def save_plantuml_files(documentation: dict, base_dir: str = None):
         print(f"🌐 Preview ({role}): {plantuml_url(salt_code)}\n")
 
     print(f"📂 All PUML wireframes saved under: {puml_dir}")
+    return base_dir
 
 def save_plantuml_png_files(salt_wireframes: dict, base_dir: str):
     """
     Render PlantUML SALT diagrams as PNG and save them locally
     EXACT SAME AS COLAB
     """
-    import os
-    from pathlib import Path
-    
     Path(base_dir).mkdir(parents=True, exist_ok=True)
-
+    
+    png_count = 0
     for name, salt_code in salt_wireframes.items():
         safe_name = safe_filename(name)
         output_file = os.path.join(base_dir, f"{safe_name}.png")
         try:
             # Use your existing render function
-            url_or_path = render_plantuml_png(salt_code, output_file=output_file)
-            print(f"✅ Saved PNG for '{name}' at: {output_file}")
+            result = render_plantuml_png(salt_code, output_file=output_file)
+            if result and os.path.exists(output_file):
+                png_count += 1
+                print(f"✅ Saved PNG for '{name}' at: {output_file}")
+            else:
+                print(f"⚠️ Failed to save PNG for '{name}'")
         except Exception as e:
             print(f"⚠️ Failed to render PNG for '{name}': {e}")
 
+    print(f"📊 Total PNG files saved: {png_count}/{len(salt_wireframes)}")
+
 def save_all_artifacts(project_info: dict, html_docs: dict, creole_docs: dict,
-                      salt_wireframes: dict, timestamp: str):
+                      salt_wireframes: dict, timestamp: str) -> str:
     """
     Save all documentation artifacts to files, including PNG images
     EXACT SAME AS COLAB
@@ -212,10 +220,11 @@ def save_all_artifacts(project_info: dict, html_docs: dict, creole_docs: dict,
     os.makedirs(base_dir, exist_ok=True)
 
     # Save HTML files
-    html_dir = f"{base_dir}/html"
+    html_dir = os.path.join(base_dir, "html")
     os.makedirs(html_dir, exist_ok=True)
 
-    for role, html_content in html_docs["role_pages"].items():
+    html_count = 0
+    for role, html_content in html_docs.get("role_pages", {}).items():
         # FIX: Replace all problematic characters including forward slashes
         safe_role = role.replace('/', '_').replace('\\', '_').replace(' ', '_').lower()
         filename = f"{safe_role}.html"
@@ -223,12 +232,14 @@ def save_all_artifacts(project_info: dict, html_docs: dict, creole_docs: dict,
 
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(html_content)
+        html_count += 1
         print(f"✅ Saved HTML: {filepath}")
 
     # Save Creole files
-    creole_dir = f"{base_dir}/creole"
+    creole_dir = os.path.join(base_dir, "creole")
     os.makedirs(creole_dir, exist_ok=True)
 
+    creole_count = 0
     for name, creole_content in creole_docs.items():
         # FIX: Same sanitization for creole files
         safe_name = name.replace('/', '_').replace('\\', '_').replace(' ', '_').lower()
@@ -236,12 +247,14 @@ def save_all_artifacts(project_info: dict, html_docs: dict, creole_docs: dict,
 
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(creole_content)
+        creole_count += 1
         print(f"✅ Saved Creole: {filepath}")
 
-    # Save PNG images - FIXED version
-    png_dir = f"{base_dir}/png"
+    # Save PNG images
+    png_dir = os.path.join(base_dir, "png")
     os.makedirs(png_dir, exist_ok=True)
 
+    png_count = 0
     for name, salt_code in salt_wireframes.items():
         # FIX: Same sanitization for PNG files
         safe_name = name.replace('/', '_').replace('\\', '_').replace(' ', '_').lower()
@@ -249,15 +262,63 @@ def save_all_artifacts(project_info: dict, html_docs: dict, creole_docs: dict,
 
         try:
             # Use the render function that returns URL when output_file is provided
-            render_plantuml_png(salt_code, output_file=output_file)
-            print(f"✅ Saved PNG: {output_file}")
+            result = render_plantuml_png(salt_code, output_file=output_file)
+            if result and os.path.exists(output_file):
+                png_count += 1
+                print(f"✅ Saved PNG: {output_file}")
+            else:
+                print(f"⚠️ Failed to save PNG for '{name}'")
         except Exception as e:
             print(f"⚠️ Failed to save PNG for '{name}': {e}")
             # Create a placeholder file to avoid further errors
             with open(output_file, 'w') as f:
                 f.write("PNG generation failed")
 
-    print(f"✅ All artifacts saved to: {base_dir}/")
-    print(f"   HTML Pages: {len(html_docs['role_pages']) + 1}")
-    print(f"   Creole Files: {len(creole_docs)}")
-    print(f"   PNG Images: {len(salt_wireframes)}")
+    print(f"\n✅ All artifacts saved to: {base_dir}/")
+    print(f"   📄 HTML Pages: {html_count}")
+    print(f"   📝 Creole Files: {creole_count}")
+    print(f"   🎨 PNG Images: {png_count}")
+    print(f"   🔗 PlantUML URLs: {len(salt_wireframes)}")
+    
+    return base_dir
+
+def generate_complete_documentation_pipeline(project_info: Dict, user_stories: List[Dict], rag_db: Any = None) -> Dict:
+    """
+    RAG-enhanced complete pipeline: HTML → Creole → Salt UML → PNG
+    EXACT SAME AS COLAB but adapted for Django
+    """
+    print("\n" + "=" * 60)
+    print("RAG-ENHANCED DOCUMENTATION PIPELINE")
+    print("=" * 60)
+
+    # 1. Generate HTML documentation with RAG patterns
+    print("📝 Step 1: Generating RAG-enhanced HTML documentation...")
+    from stories.utils.wireframe_generator import WireframeGenerator
+    html_generator = WireframeGenerator()
+    html_docs = html_generator.generate_html_documentation(project_info, user_stories, rag_db)
+
+    # 2. Convert HTML to Creole format
+    print("🔄 Step 2: Converting HTML to Creole format...")
+    from stories.utils.creole_converter import convert_html_to_creole
+    creole_docs = {}
+    for role, html_content in html_docs["role_pages"].items():
+        creole_docs[role] = convert_html_to_creole(html_content)
+
+    # 3. Generate Salt UML wireframes
+    print("🎨 Step 3: Generating Salt UML wireframes...")
+    salt_wireframes = generate_all_salt_wireframes(html_docs)
+
+    # 4. Save all artifacts
+    print("💾 Step 4: Saving all documentation artifacts...")
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_dir = save_all_artifacts(project_info, html_docs, creole_docs, salt_wireframes, timestamp)
+
+    return {
+        "html_docs": html_docs,
+        "creole_docs": creole_docs,
+        "salt_wireframes": salt_wireframes,
+        "timestamp": timestamp,
+        "base_dir": base_dir,
+        "used_rag_patterns": rag_db is not None
+    }
