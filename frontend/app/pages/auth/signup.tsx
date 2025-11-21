@@ -2,11 +2,11 @@ import React, { useState } from "react";
 import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext"; // ✅ Import auth context
+import { useAuth } from "../../context/AuthContext";
 
 export default function SignUp() {
   const navigate = useNavigate();
-  const { login } = useAuth(); // ✅ Gunakan auth context
+  const { login } = useAuth();
   
   const [formData, setFormData] = useState({
     email: "",
@@ -21,6 +21,35 @@ export default function SignUp() {
     username: "",
     password: ""
   });
+  const [touchedFields, setTouchedFields] = useState({
+    email: false,
+    username: false,
+    password: false,
+    passwordConfirmation: false
+  });
+
+  // ✅ Password validation rules - return array of errors
+  const validatePassword = (password: string) => {
+    const errors: string[] = [];
+
+    if (password.length < 8) {
+      errors.push("Password must be at least 8 characters long");
+    }
+    if (!/(?=.*[a-z])/.test(password)) {
+      errors.push("Password must contain at least one lowercase letter");
+    }
+    if (!/(?=.*[A-Z])/.test(password)) {
+      errors.push("Password must contain at least one uppercase letter");
+    }
+    if (!/(?=.*\d)/.test(password)) {
+      errors.push("Password must contain at least one number");
+    }
+    if (!/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(password)) {
+      errors.push("Password must contain at least one symbol");
+    }
+
+    return errors;
+  };
 
   // ✅ Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,7 +69,86 @@ export default function SignUp() {
     }
   };
 
-  // ✅ Validasi form
+  // ✅ Handle field blur (when user leaves the field)
+  const handleFieldBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name } = e.target;
+    setTouchedFields(prev => ({
+      ...prev,
+      [name]: true
+    }));
+
+    // Validate the field that was just blurred
+    validateField(name, formData[name as keyof typeof formData]);
+  };
+
+  // ✅ Validate individual field
+  const validateField = (fieldName: string, value: string) => {
+    const errors = { ...fieldErrors };
+
+    if (fieldName === 'email') {
+      if (!value) {
+        errors.email = "Email is required";
+      } else if (!/\S+@\S+\.\S+/.test(value)) {
+        errors.email = "Please enter a valid email address";
+      } else {
+        errors.email = "";
+      }
+    }
+
+    if (fieldName === 'username') {
+      if (!value) {
+        errors.username = "Username is required";
+      } else if (value.length < 3) {
+        errors.username = "Username must be at least 3 characters long";
+      } else {
+        errors.username = "";
+      }
+    }
+
+    if (fieldName === 'password') {
+      if (!value) {
+        errors.password = "Password is required";
+      } else {
+        const passwordErrors = validatePassword(value);
+        if (passwordErrors.length > 0) {
+          // ✅ Combine multiple password errors
+          if (passwordErrors.length === 1) {
+            errors.password = passwordErrors[0];
+          } else {
+            // Group similar errors
+            const numberError = passwordErrors.find(err => err.includes('number'));
+            const symbolError = passwordErrors.find(err => err.includes('symbol'));
+            const lowercaseError = passwordErrors.find(err => err.includes('lowercase'));
+            const uppercaseError = passwordErrors.find(err => err.includes('uppercase'));
+            const lengthError = passwordErrors.find(err => err.includes('8 characters'));
+
+            // Create combined messages
+            const combinedErrors = [];
+            if (numberError && symbolError) {
+              combinedErrors.push("Password must contain at least one number and one symbol");
+            } else if (lowercaseError && uppercaseError) {
+              combinedErrors.push("Password must contain at least one lowercase and one uppercase letter");
+            } else {
+              // Show up to 2 specific errors
+              combinedErrors.push(...passwordErrors.slice(0, 2));
+            }
+
+            errors.password = combinedErrors.join(', ');
+          }
+        } else {
+          errors.password = "";
+        }
+      }
+    }
+
+    if (fieldName === 'passwordConfirmation') {
+      // This will be handled in the main validation
+    }
+
+    setFieldErrors(errors);
+  };
+
+  // ✅ Validasi form untuk submit
   const validateForm = () => {
     const errors = {
       email: "",
@@ -60,10 +168,19 @@ export default function SignUp() {
       errors.username = "Username must be at least 3 characters long";
     }
 
+    // ✅ Enhanced password validation
     if (!formData.password) {
       errors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      errors.password = "Password must be at least 6 characters long";
+    } else {
+      const passwordErrors = validatePassword(formData.password);
+      if (passwordErrors.length > 0) {
+        // Combine multiple errors for form submission
+        if (passwordErrors.length > 1) {
+          errors.password = `Password requirements not met: ${passwordErrors.slice(0, 2).join(', ')}`;
+        } else {
+          errors.password = passwordErrors[0];
+        }
+      }
     }
 
     if (formData.password !== formData.passwordConfirmation) {
@@ -115,10 +232,46 @@ export default function SignUp() {
     return fieldErrors;
   };
 
+  // ✅ Password strength indicator
+  const getPasswordStrength = (password: string) => {
+    if (!password) return { strength: 0, color: "bg-gray-200" };
+    
+    let strength = 0;
+    if (password.length >= 8) strength += 1;
+    if (/(?=.*[a-z])/.test(password)) strength += 1;
+    if (/(?=.*[A-Z])/.test(password)) strength += 1;
+    if (/(?=.*\d)/.test(password)) strength += 1;
+    if (/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(password)) strength += 1;
+
+    const colors = [
+      "bg-red-500",
+      "bg-orange-500",
+      "bg-yellow-500", 
+      "bg-blue-500",
+      "bg-green-500"
+    ];
+
+    return {
+      strength,
+      color: colors[strength - 1] || "bg-gray-200",
+      percentage: (strength / 5) * 100
+    };
+  };
+
+  const passwordStrength = getPasswordStrength(formData.password);
+
   // ✅ Handle Sign Up
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Mark all fields as touched when submitting
+    setTouchedFields({
+      email: true,
+      username: true,
+      password: true,
+      passwordConfirmation: true
+    });
+
     // Validasi client-side
     if (validateForm()) {
       return;
@@ -191,6 +344,11 @@ export default function SignUp() {
     navigate("/Signin");
   };
 
+  // ✅ Helper to show field error only if touched
+  const shouldShowError = (fieldName: keyof typeof touchedFields) => {
+    return touchedFields[fieldName] && fieldErrors[fieldName as keyof typeof fieldErrors];
+  };
+
   return (
     <div className="flex flex-col min-h-screen font-sans">
       <Header />
@@ -231,15 +389,16 @@ export default function SignUp() {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
+                  onBlur={handleFieldBlur}
                   placeholder="Enter Your Email"
                   className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 ${
-                    fieldErrors.email 
+                    shouldShowError('email') 
                       ? "border-red-400 focus:ring-red-400" 
                       : "border-primary-200 focus:ring-primary-400"
                   }`}
                   required
                 />
-                {fieldErrors.email && (
+                {shouldShowError('email') && (
                   <p className="text-red-500 text-sm mt-1">{fieldErrors.email}</p>
                 )}
               </div>
@@ -252,15 +411,16 @@ export default function SignUp() {
                   name="username"
                   value={formData.username}
                   onChange={handleInputChange}
+                  onBlur={handleFieldBlur}
                   placeholder="Enter Your Username"
                   className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 ${
-                    fieldErrors.username 
+                    shouldShowError('username') 
                       ? "border-red-400 focus:ring-red-400" 
                       : "border-primary-200 focus:ring-primary-400"
                   }`}
                   required
                 />
-                {fieldErrors.username && (
+                {shouldShowError('username') && (
                   <p className="text-red-500 text-sm mt-1">{fieldErrors.username}</p>
                 )}
               </div>
@@ -273,17 +433,62 @@ export default function SignUp() {
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  placeholder="Enter Your Password (min. 6 characters)"
+                  onBlur={handleFieldBlur}
+                  placeholder="Enter Your Password (min. 8 characters)"
                   className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 ${
-                    fieldErrors.password 
+                    shouldShowError('password') 
                       ? "border-red-400 focus:ring-red-400" 
                       : "border-primary-200 focus:ring-primary-400"
                   }`}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
-                {fieldErrors.password && (
-                  <p className="text-red-500 text-sm mt-1">{fieldErrors.password}</p>
+                
+                {/* ✅ Password Strength Indicator */}
+                {formData.password && (
+                  <div className="mt-2">
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>Password strength:</span>
+                      <span>{passwordStrength.strength}/5</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-300 ${passwordStrength.color}`}
+                        style={{ width: `${passwordStrength.percentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ✅ Password Requirements */}
+                <div className="mt-2 text-xs text-gray-600">
+                  <p className="font-medium mb-1">Password must contain:</p>
+                  <ul className="space-y-1">
+                    <li className={`flex items-center ${formData.password.length >= 8 ? 'text-green-600' : 'text-gray-400'}`}>
+                      <span className="mr-1">{formData.password.length >= 8 ? '✓' : '○'}</span>
+                      At least 8 characters
+                    </li>
+                    <li className={`flex items-center ${/(?=.*[a-z])/.test(formData.password) ? 'text-green-600' : 'text-gray-400'}`}>
+                      <span className="mr-1">{/(?=.*[a-z])/.test(formData.password) ? '✓' : '○'}</span>
+                      One lowercase letter
+                    </li>
+                    <li className={`flex items-center ${/(?=.*[A-Z])/.test(formData.password) ? 'text-green-600' : 'text-gray-400'}`}>
+                      <span className="mr-1">{/(?=.*[A-Z])/.test(formData.password) ? '✓' : '○'}</span>
+                      One uppercase letter
+                    </li>
+                    <li className={`flex items-center ${/(?=.*\d)/.test(formData.password) ? 'text-green-600' : 'text-gray-400'}`}>
+                      <span className="mr-1">{/(?=.*\d)/.test(formData.password) ? '✓' : '○'}</span>
+                      One number
+                    </li>
+                    <li className={`flex items-center ${/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(formData.password) ? 'text-green-600' : 'text-gray-400'}`}>
+                      <span className="mr-1">{/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(formData.password) ? '✓' : '○'}</span>
+                      One symbol
+                    </li>
+                  </ul>
+                </div>
+
+                {shouldShowError('password') && (
+                  <p className="text-red-500 text-sm mt-2">{fieldErrors.password}</p>
                 )}
               </div>
 
@@ -295,10 +500,18 @@ export default function SignUp() {
                   name="passwordConfirmation"
                   value={formData.passwordConfirmation}
                   onChange={handleInputChange}
+                  onBlur={handleFieldBlur}
                   placeholder="Re-enter Your Password"
-                  className="w-full px-4 py-3 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                    touchedFields.passwordConfirmation && formData.password !== formData.passwordConfirmation
+                      ? "border-red-400 focus:ring-red-400" 
+                      : "border-primary-200 focus:ring-primary-400"
+                  }`}
                   required
                 />
+                {touchedFields.passwordConfirmation && formData.password !== formData.passwordConfirmation && (
+                  <p className="text-red-500 text-sm mt-1">Passwords do not match</p>
+                )}
               </div>
 
               {/* ✅ Tombol Sign Up */}
