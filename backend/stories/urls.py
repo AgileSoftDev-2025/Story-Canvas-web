@@ -1,107 +1,34 @@
 from django.urls import path, include
-
 from stories.views.project_description import (
-    get_projects,
-    get_project,
-    create_project,
-    update_project,
-    delete_project,
-    get_project_stats
+    get_projects, get_project, create_project, update_project, delete_project, get_project_stats
 )
-
 from stories.views.export_preview import (
-    preview_export_by_id,
-    preview_project_export,
-    generate_export_preview,
-    list_user_exports
+    preview_export_by_id, preview_project_export, generate_export_preview, list_user_exports
 )
-
 from stories.views.health import health_check
-
-from stories.views.project_description import (
-    get_projects,
-    get_project,
-    create_project,
-    update_project,
-    delete_project,
-    get_project_stats
-)
-
-from stories.views.health import health_check
-
 from stories.views.user_story import (
-    get_user_stories,
-    get_user_story_detail,
-    create_user_story,
-    update_user_story,
-    delete_user_story,
-    get_project_user_stories,
-    get_user_stories_by_status,
-    get_user_stories_by_priority,
+    get_user_stories, get_user_story_detail, create_user_story, update_user_story, 
+    delete_user_story, get_project_user_stories, get_user_stories_by_status, get_user_stories_by_priority
 )
-
 from stories.views.scenario import (
-    get_story_scenarios,
-    get_project_scenarios,
-    create_scenario,
-    update_scenario,
-    delete_scenario 
+    get_story_scenarios, get_project_scenarios, create_scenario, update_scenario, 
+    delete_scenario, generate_story_scenarios_api, accept_scenarios, get_scenario_detail
 )
-
 from stories.views.wireframe import (
-    list_wireframes,
-    get_wireframe,
-    create_wireframe,
-    update_wireframe,
-    delete_wireframe
+    list_wireframes, get_wireframe, create_wireframe, update_wireframe, delete_wireframe
 )
-
-from stories.views.scenario import (
-    get_story_scenarios,
-    get_project_scenarios,
-    create_scenario,
-    update_scenario,
-    delete_scenario 
-)
-
-from stories.views.wireframe import (
-    list_wireframes,
-    get_wireframe,
-    create_wireframe,
-    update_wireframe,
-    delete_wireframe
-)
-
 from stories.views.auth.token_auth import (
-    signup,
-    signin,
-    current_user,
-    signout,
-    refresh_token,
+    signup, signin, current_user, signout, refresh_token
 )
-
 from stories.views.auth.auth_debug import (
     debug_signin,
 )
-
 from stories.generation_views import (
-    get_rag_status,
-    query_rag_patterns,
-    query_ui_patterns,
-    generate_user_stories,
-    generate_wireframes,
-    generate_scenarios,
-    export_all_artifacts,
-    ai_edit_user_stories,
-    generate_story_scenarios,
-    ai_edit_user_story,
-    ai_edit_story_scenarios,
-    generate_creole,
-    generate_salt_diagram,
-    render_png_diagram,
-    ai_edit_wireframe
+    get_rag_status, query_rag_patterns, query_ui_patterns, generate_user_stories,
+    generate_wireframes, generate_scenarios, export_all_artifacts, ai_edit_user_stories,
+    generate_story_scenarios, ai_edit_user_story, ai_edit_story_scenarios, generate_creole,
+    generate_salt_diagram, render_png_diagram, ai_edit_wireframe
 )
-
 
 urlpatterns = [
     #auth endpoints
