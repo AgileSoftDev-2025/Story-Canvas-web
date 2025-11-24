@@ -1,5 +1,6 @@
-// app/context/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+// frontend/src/contexts/AuthContext.tsx
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 
 interface User {
   id: number;
@@ -7,33 +8,47 @@ interface User {
   email: string;
 }
 
+interface AuthTokens {
+  access: string;
+  refresh: string;
+}
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (tokens: { access: string; refresh: string }, userData: User) => void;
+  token: string | null;
+  login: (tokens: AuthTokens, userData: User) => void;
   logout: () => Promise<void>;
   loading: boolean;
+  refreshToken: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const checkAuth = () => {
       try {
-        const token = localStorage.getItem('access_token');
+        const accessToken = localStorage.getItem('access_token');
         const userData = localStorage.getItem('user');
-
-        if (token && userData) {
+        
+        if (accessToken && userData) {
           const parsedUser = JSON.parse(userData);
           setUser(parsedUser);
+          setToken(accessToken);
+          console.log('✅ User authenticated from localStorage:', parsedUser.username);
         }
       } catch (error) {
-        console.error('Error checking auth:', error);
-        // Clear invalid data
+        console.error('❌ Error checking auth:', error);
+        // Clear corrupted data
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
@@ -45,18 +60,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, []);
 
-  const login = (tokens: { access: string; refresh: string }, userData: User) => {
+  const login = (tokens: AuthTokens, userData: User) => {
+    console.log('🔐 Logging in user:', userData.username);
     localStorage.setItem('access_token', tokens.access);
     localStorage.setItem('refresh_token', tokens.refresh);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
+    setToken(tokens.access);
+    console.log('✅ Login successful');
   };
 
-  const logout = useCallback(async (): Promise<void> => {
+  const refreshToken = async (): Promise<boolean> => {
+    try {
+      const refreshToken = localStorage.getItem('refresh_token');
+      
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await fetch('http://127.0.0.1:8000/api/auth/refresh/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          refresh_token: refreshToken
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Token refresh failed');
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.tokens?.access) {
+        localStorage.setItem('access_token', result.tokens.access);
+        setToken(result.tokens.access);
+        console.log('✅ Token refreshed successfully');
+        return true;
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing token:', error);
+      await logout();
+      return false;
+    }
+  };
+
+  const logout = async (): Promise<void> => {
     try {
       const refreshToken = localStorage.getItem('refresh_token');
       const accessToken = localStorage.getItem('access_token');
-
+      
+      // Call backend signout endpoint if tokens exist
       if (refreshToken && accessToken) {
         await fetch('http://127.0.0.1:8000/api/auth/signout/', {
           method: 'POST',
@@ -64,26 +122,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`,
           },
-          body: JSON.stringify({ refresh_token: refreshToken }),
+          body: JSON.stringify({
+            refresh_token: refreshToken
+          }),
+        }).catch(error => {
+          console.error('❌ Logout API call failed:', error);
         });
       }
     } catch (error) {
-      console.error('Error during logout API call:', error);
+      console.error('❌ Error during logout:', error);
     } finally {
+      // Clear all auth data from localStorage
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
       localStorage.removeItem('user');
       localStorage.removeItem('current_project_id');
       setUser(null);
+      setToken(null);
+      console.log('✅ Logout completed');
     }
-  }, []);
+  };
 
   const value: AuthContextType = {
     user,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user && !!token,
+    token,
     login,
     logout,
     loading,
+    refreshToken,
   };
 
   return (

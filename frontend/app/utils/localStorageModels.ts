@@ -1,13 +1,10 @@
 // frontend/src/utils/localStorageModels.ts
-
-// Base interface dengan UUID pendek
 export interface BaseEntity {
   id: string;
   created_at: string;
   updated_at: string;
 }
 
-// User Model (sesuai dengan CustomUser di Django)
 export interface LocalUser extends BaseEntity {
   username: string;
   email: string;
@@ -16,7 +13,6 @@ export interface LocalUser extends BaseEntity {
   last_login: string;
 }
 
-// Project Model (sesuai dengan Project di Django)
 export interface LocalProject {
   project_id: string;
   user_id: string;
@@ -34,8 +30,8 @@ export interface LocalProject {
   nlp_analysis: Record<string, any>;
   
   // JSON data storage
-  users_data: any[];
-  features_data: any[];
+  users_data: string[];
+  features_data: string[];
   
   status: 'draft' | 'in_progress' | 'completed' | 'archived';
   
@@ -44,7 +40,6 @@ export interface LocalProject {
   updated_at: string;
 }
 
-// User Story Model (sesuai dengan UserStory di Django)
 export interface LocalUserStory {
   story_id: string;
   project_id: string;
@@ -68,7 +63,6 @@ export interface LocalUserStory {
   updated_at: string;
 }
 
-// Wireframe Model (sesuai dengan Wireframe di Django)
 export interface LocalWireframe {
   wireframe_id: string;
   project_id: string;
@@ -92,7 +86,6 @@ export interface LocalWireframe {
   updated_at: string;
 }
 
-// Scenario Model (sesuai dengan Scenario di Django)
 export interface LocalScenario {
   scenario_id: string;
   project_id: string;
@@ -109,91 +102,6 @@ export interface LocalScenario {
   
   enhanced_with_llm: boolean;
   status: 'draft' | 'reviewed' | 'approved' | 'tested';
-  
-  // Timestamps
-  created_at: string;
-  updated_at: string;
-}
-
-// Generation Session Model
-export interface LocalGenerationSession {
-  session_id: string;
-  project_id: string;
-  user_id: string;
-  
-  llm_model_used: string;
-  
-  user_stories_generated: number;
-  wireframes_generated: number;
-  scenarios_generated: number;
-  total_iterations: number;
-  
-  start_time: string;
-  end_time: string | null;
-  duration_seconds: number;
-  
-  status: 'running' | 'completed' | 'failed';
-  error_message: string | null;
-  
-  // Timestamps
-  created_at: string;
-  updated_at: string;
-}
-
-// Project History Model dengan field optional
-export interface LocalProjectHistory {
-  history_id: string;
-  project_id: string;
-  user_id: string;
-  generation_session_id: string | null;
-  
-  action_type: 'project_created' | 'project_updated' | 'stories_generated' | 'wireframes_generated' | 'scenarios_generated' | 'export_created' | 'review_iteration';
-  action_details: Record<string, any>;
-  description: string;
-  
-  related_story_id: string | null;
-  related_wireframe_id: string | null;
-  related_scenario_id: string | null;
-  
-  // Timestamps
-  created_at: string;
-  updated_at: string;
-}
-
-// Type untuk membuat project history (field optional benar-benar optional)
-export type CreateProjectHistoryData = {
-  project_id: string;
-  user_id: string;
-  action_type: LocalProjectHistory['action_type'];
-  action_details: Record<string, any>;
-  description: string;
-  generation_session_id?: string | null;
-  related_story_id?: string | null;
-  related_wireframe_id?: string | null;
-  related_scenario_id?: string | null;
-};
-
-// Export Model
-export interface LocalExport {
-  export_id: string;
-  project_id: string;
-  user_id: string;
-  generation_session_id: string | null;
-  
-  export_format: 'html' | 'pdf' | 'word' | 'json' | 'zip';
-  file_path: string | null;
-  file_url: string | null;
-  file_size: number;
-  
-  include_stories: boolean;
-  include_wireframes: boolean;
-  include_scenarios: boolean;
-  export_config: Record<string, any>;
-  
-  status: string;
-  error_message: string | null;
-  
-  exported_at: string;
   
   // Timestamps
   created_at: string;

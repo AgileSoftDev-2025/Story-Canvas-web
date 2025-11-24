@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 import { localStorageService } from "../../utils/localStorageService";
 
 interface ProjectFormData {

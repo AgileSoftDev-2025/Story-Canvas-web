@@ -60,6 +60,7 @@ def get_projects(request):
         }, status=500)
 
 @api_view(['GET'])
+@csrf_exempt
 @jwt_token
 def get_project(request, project_id):
     """
