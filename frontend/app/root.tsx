@@ -9,7 +9,7 @@ import {
 
 import type { Route } from "./+types/root";
 import "./styling/app.css";
-import { AuthProvider } from "./context/AuthContext"; // ✅ Import AuthProvider
+import { AuthProvider } from "./context/AuthContext";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -34,7 +34,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
+        <AuthProvider> {/* ✅ PASTIKAN AuthProvider di sini */}
+          {children}
+        </AuthProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -43,11 +45,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return (
-    <AuthProvider> {/* ✅ Wrap dengan AuthProvider */}
-      <Outlet />
-    </AuthProvider>
-  );
+  return <Outlet />;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

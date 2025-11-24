@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+// app/context/AuthContext.tsx
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 interface User {
   id: number;
@@ -10,13 +11,13 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   login: (tokens: { access: string; refresh: string }, userData: User) => void;
-  logout: () => Promise<void>; // ✅ Ubah jadi async
+  logout: () => Promise<void>;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -25,14 +26,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         const token = localStorage.getItem('access_token');
         const userData = localStorage.getItem('user');
-        
+
         if (token && userData) {
           const parsedUser = JSON.parse(userData);
           setUser(parsedUser);
         }
       } catch (error) {
         console.error('Error checking auth:', error);
-        logout();
+        // Clear invalid data
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
       } finally {
         setLoading(false);
       }
@@ -48,35 +52,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(userData);
   };
 
-  // ✅ Logout function yang call backend API
-  const logout = async (): Promise<void> => {
+  const logout = useCallback(async (): Promise<void> => {
     try {
       const refreshToken = localStorage.getItem('refresh_token');
-      
-      // ✅ Panggil backend signout endpoint
-      if (refreshToken) {
+      const accessToken = localStorage.getItem('access_token');
+
+      if (refreshToken && accessToken) {
         await fetch('http://127.0.0.1:8000/api/auth/signout/', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            'Authorization': `Bearer ${accessToken}`,
           },
-          body: JSON.stringify({
-            refresh_token: refreshToken
-          }),
+          body: JSON.stringify({ refresh_token: refreshToken }),
         });
       }
     } catch (error) {
       console.error('Error during logout API call:', error);
-      // Tetap lanjutkan logout meskipun API call gagal
     } finally {
-      // ✅ Hapus semua data dari localStorage
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
       localStorage.removeItem('user');
+      localStorage.removeItem('current_project_id');
       setUser(null);
     }
-  };
+  }, []);
 
   const value: AuthContextType = {
     user,
@@ -86,10 +86,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     loading,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
