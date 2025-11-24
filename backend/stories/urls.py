@@ -31,7 +31,7 @@ from stories.generation_views import (
 )
 
 urlpatterns = [
-    #auth endpoints
+    # ========== AUTH ENDPOINTS ==========
     path('api/auth/debug-signin/', debug_signin, name='debug_signin'),
     path('api/auth/signup/', signup, name='signup'),
     path('api/auth/signin/', signin, name='signin'),
@@ -39,49 +39,10 @@ urlpatterns = [
     path('api/auth/signout/', signout, name='signout'),
     path('api/auth/refresh/', refresh_token, name='refresh_token'),
 
-    # User Stories endpoints
-    path('api/user-stories/', get_user_stories, name='get_user_stories'),
-    path('api/user-stories/create/', create_user_story, name='create_user_story'),
-    path('api/user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
-    path('api/user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
-    path('api/user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
-    path('api/user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
-    path('api/user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
-    # User Stories endpoints
-    path('user-stories/', get_user_stories, name='get_user_stories'),
-    path('user-stories/create/', create_user_story, name='create_user_story'),
-    path('user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
-    path('user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
-    path('user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
-    path('user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
-    path('user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
-
-    # ========== COMMENT/HAPUS USER STORY PAGE ENDPOINTS (SEMENTARA) ==========
-    # path('projects/<str:project_id>/user-story-page/', get_user_story_page, name='get_user_story_page'),
-    # path('projects/<str:project_id>/user-story-page/create/', create_user_story_page, name='create_user_story_page'),
-    # path('projects/<str:project_id>/user-story-page/update/', update_user_story_page, name='update_user_story_page'),
-    # path('projects/<str:project_id>/user-story-page/accept/', accept_user_story_page, name='accept_user_story_page'),
-    # path('projects/<str:project_id>/user-story-page/status/', get_user_story_page_status, name='get_user_story_page_status'),
-
-    # ========== PROJECT-SPECIFIC USER STORIES ==========
-    path('projects/<str:project_id>/user-stories/', get_project_user_stories, name='get_project_user_stories'),
-    path('api/user-stories/', get_user_stories, name='get_user_stories'),
-    path('api/user-stories/create/', create_user_story, name='create_user_story'),
-    path('api/user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
-    path('api/user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
-    path('api/user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
-    path('api/user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
-    path('api/user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
-    
-    # User Story Scenario endpoints
-    path('api/user-stories/<str:story_id>/scenarios/', get_story_scenarios, name='get_story_scenarios'),
-    
-    # Authentication endpoints
-
-    # Health check endpoint
+    # ========== HEALTH CHECK ==========
     path('api/health/', health_check, name='health_check'),
 
-    # Project endpoints
+    # ========== PROJECT ENDPOINTS ==========
     path('api/projects/', get_projects, name='get_projects'),
     path('api/projects/create/', create_project, name='create_project'),
     path('api/projects/<str:project_id>/', get_project, name='get_project'),
@@ -89,49 +50,82 @@ urlpatterns = [
     path('api/projects/<str:project_id>/delete/', delete_project, name='delete_project'),
     path('api/projects/<str:project_id>/stats/', get_project_stats, name='get_project_stats'),
 
-
-      # Project wireframes
-    path('api/projects/<str:project_id>/wireframes/', list_wireframes, name='list_wireframes'),
-    path('api/projects/<str:project_id>/wireframes/create/', create_wireframe, name='create_wireframe'),
+    # ========== USER STORIES ENDPOINTS ==========
+    path('api/user-stories/', get_user_stories, name='get_user_stories'),
+    path('api/user-stories/create/', create_user_story, name='create_user_story'),
+    path('api/user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
+    path('api/user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
+    path('api/user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
+    path('api/user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
+    path('api/user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
     
-    # Single wireframe operations
-    path('api/wireframes/<str:wireframe_id>/', get_wireframe, name='get_wireframe'),
-    path('api/wireframes/<str:wireframe_id>/update/', update_wireframe, name='update_wireframe'),
-    path('api/wireframes/<str:wireframe_id>/delete/', delete_wireframe, name='delete_wireframe'),
-    
-    # Project-specific endpoints
+    # Project-specific user stories
     path('api/projects/<str:project_id>/user-stories/', get_project_user_stories, name='get_project_user_stories'),
+
+    # ========== SCENARIO ENDPOINTS ==========
+    path('api/user-stories/<str:story_id>/scenarios/', get_story_scenarios, name='get_story_scenarios'),
     path('api/projects/<str:project_id>/scenarios/', get_project_scenarios, name='get_project_scenarios'),
-    
-    # Scenario CRUD endpoints
     path('api/scenarios/create/', create_scenario, name='create_scenario'),
     path('api/scenarios/create/story/<str:story_id>/', create_scenario, name='create_scenario_for_story'),
     path('api/scenarios/create/project/<str:project_id>/', create_scenario, name='create_scenario_for_project'),
     path('api/scenarios/<str:scenario_id>/update/', update_scenario, name='update_scenario'),
     path('api/scenarios/<str:scenario_id>/delete/', delete_scenario, name='delete_scenario'),
-    # User Story Scenario endpoints
-    path('api/user-stories/<str:story_id>/scenarios/', get_story_scenarios, name='get_story_scenarios'),
-    
-    # RAG endpoints
+    path('api/scenarios/<str:scenario_id>/', get_scenario_detail, name='get_scenario_detail'),
+    path('api/scenarios/<str:scenario_id>/accept/', accept_scenarios, name='accept_scenarios'),
+
+    # ========== WIREFRAME ENDPOINTS ==========
+    path('api/projects/<str:project_id>/wireframes/', list_wireframes, name='list_wireframes'),
+    path('api/projects/<str:project_id>/wireframes/create/', create_wireframe, name='create_wireframe'),
+    path('api/wireframes/<str:wireframe_id>/', get_wireframe, name='get_wireframe'),
+    path('api/wireframes/<str:wireframe_id>/update/', update_wireframe, name='update_wireframe'),
+    path('api/wireframes/<str:wireframe_id>/delete/', delete_wireframe, name='delete_wireframe'),
+
+    # ========== EXPORT PREVIEW ENDPOINTS ==========
+    path('api/exports/preview/<str:export_id>/', preview_export_by_id, name='preview-export-by-id'),
+    path('api/projects/<str:project_id>/export-preview/', preview_project_export, name='preview-project-export'),
+    path('api/exports/generate-preview/', generate_export_preview, name='generate-export-preview'),
+    path('api/exports/', list_user_exports, name='list-user-exports'),
+
+    # ========== RAG ENDPOINTS ==========
     path('api/rag/status/', get_rag_status, name='get_rag_status'),
     path('api/rag/query-patterns/', query_rag_patterns, name='query_rag_patterns'),
     path('api/rag/query-ui-patterns/', query_ui_patterns, name='query_ui_patterns'),
 
-    # Project generation endpoints
+    # ========== GENERATION ENDPOINTS ==========
+    # Project generation
     path('api/projects/<str:project_id>/generate-user-stories/', generate_user_stories, name='generate_user_stories'),
     path('api/projects/<str:project_id>/generate-wireframes/', generate_wireframes, name='generate_wireframes'),
     path('api/projects/<str:project_id>/generate-scenarios/', generate_scenarios, name='generate_scenarios'),
     path('api/projects/<str:project_id>/export-all-artifacts/', export_all_artifacts, name='export_all_artifacts'),
     path('api/projects/<str:project_id>/ai-edit-user-stories/', ai_edit_user_stories, name='ai_edit_user_stories'),
 
-    # User story generation endpoints
+    # User story generation
     path('api/user-stories/<str:story_id>/generate-scenarios/', generate_story_scenarios, name='generate_story_scenarios'),
+    path('api/user-stories/<str:story_id>/generate-scenarios-api/', generate_story_scenarios_api, name='generate_story_scenarios_api'),
     path('api/user-stories/<str:story_id>/ai-edit/', ai_edit_user_story, name='ai_edit_user_story'),
     path('api/user-stories/<str:story_id>/ai-edit-scenarios/', ai_edit_story_scenarios, name='ai_edit_story_scenarios'),
 
-    # Wireframe generation endpoints
+    # Wireframe generation
     path('api/wireframes/<str:wireframe_id>/generate-creole/', generate_creole, name='generate_creole'),
     path('api/wireframes/<str:wireframe_id>/generate-salt-diagram/', generate_salt_diagram, name='generate_salt_diagram'),
     path('api/wireframes/<str:wireframe_id>/render-png-diagram/', render_png_diagram, name='render_png_diagram'),
     path('api/wireframes/<str:wireframe_id>/ai-edit/', ai_edit_wireframe, name='ai_edit_wireframe'),
+
+    # ========== LEGACY ENDPOINTS (DUPLICATES - BISA DIHAPUS) ==========
+    # Endpoint berikut adalah duplikat dan bisa dihapus jika tidak digunakan
+    path('user-stories/', get_user_stories, name='get_user_stories'),
+    path('user-stories/create/', create_user_story, name='create_user_story'),
+    path('user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
+    path('user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
+    path('user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
+    path('user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
+    path('user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
+    path('projects/<str:project_id>/user-stories/', get_project_user_stories, name='get_project_user_stories'),
 ]
+
+# ========== COMMENTED OUT ENDPOINTS (SEMENTARA) ==========
+# path('projects/<str:project_id>/user-story-page/', get_user_story_page, name='get_user_story_page'),
+# path('projects/<str:project_id>/user-story-page/create/', create_user_story_page, name='create_user_story_page'),
+# path('projects/<str:project_id>/user-story-page/update/', update_user_story_page, name='update_user_story_page'),
+# path('projects/<str:project_id>/user-story-page/accept/', accept_user_story_page, name='accept_user_story_page'),
+# path('projects/<str:project_id>/user-story-page/status/', get_user_story_page_status, name='get_user_story_page_status'),
