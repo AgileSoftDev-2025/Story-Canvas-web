@@ -13,8 +13,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
-# PERBAIKAN: Gunakan fallback yang valid jika environment variable tidak ada
-SECRET_KEY = 'django-insecure-fixed-key-for-now-1234567890'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'your-secret-key-here')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'

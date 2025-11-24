@@ -1,7 +1,73 @@
-// frontend/src/routes/preview.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
+import { exportService, type ExportConfig, type FallbackProjectData } from "../../services/exportService";
+
+// Gunakan interface yang sama dengan exportService
+interface ProjectData extends FallbackProjectData {}
+
+const FALLBACK_PROJECT_DATA: ProjectData = {
+  project_id: "1aea2b0d-1c3a-400f-8c84-a1fa9d8c6758",
+  title: "Sample E-Commerce Project",
+  domain: "E-Commerce",
+  objective: "Build a modern e-commerce platform",
+  user_stories: [
+    {
+      id: 1,
+      role: "Customer",
+      action: "browse products",
+      benefit: "I can find what I want to buy",
+      acceptance_criteria: "Display products with images and prices",
+      priority: "High",
+      status: "Todo",
+    },
+    {
+      id: 2,
+      role: "Customer",
+      action: "add items to cart",
+      benefit: "I can purchase multiple items",
+      acceptance_criteria: "Cart should update quantity and total",
+      priority: "High",
+      status: "Todo",
+    },
+    {
+      id: 3,
+      role: "Admin",
+      action: "manage products",
+      benefit: "I can keep inventory updated",
+      acceptance_criteria: "CRUD operations for products",
+      priority: "Medium",
+      status: "Todo",
+    },
+  ],
+  wireframes: [
+    {
+      id: 1,
+      title: "Homepage",
+      description: "Main landing page with product listings",
+      page_type: "Landing",
+      creole_content: "Header\nProduct Grid\nFooter",
+    },
+    {
+      id: 2,
+      title: "Product Detail",
+      description: "Detailed product information page",
+      page_type: "Detail",
+      creole_content: "Product Image\nProduct Info\nAdd to Cart Button",
+    },
+  ],
+  scenarios: [
+    {
+      id: 1,
+      title: "Add to Cart",
+      description: "User adds product to shopping cart",
+      given_steps: "user is on product page\nproduct is in stock",
+      when_steps: "user clicks add to cart button",
+      then_steps: "cart count increases\nproduct appears in cart",
+      scenario_type: "Happy Path",
+    },
+  ],
+};
 
 export default function PreviewFinal() {
   const [activeTab, setActiveTab] = useState<"stories" | "wireframes" | "scenarios">("stories");
@@ -10,64 +76,59 @@ export default function PreviewFinal() {
     wireframes: true,
     scenarios: true,
   });
+  const [projectData, setProjectData] = useState<ProjectData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [projectId, setProjectId] = useState<string>("");
+  const [useFallback, setUseFallback] = useState(false);
+  const [error, setError] = useState<string>("");
 
-  // Sample data - replace with actual data from your state management
-  const projectTitle = "Financial Management System";
+  useEffect(() => {
+    const storedProjectId = localStorage.getItem("currentProjectId");
 
-  const userStories = [
-    {
-      role: "Individual Users",
-      stories: [
-        "As a Individual Users, I want to link my bank accounts so that the system can automatically track and categorize my transactions",
-        "As a Individual Users, I need to receive AI-driven budgeting recommendations so that I can better manage my finances",
-        "As a Individual Users, I should be able to get personalized investment portfolio suggestions so that I can make informed investment decisions",
-      ],
-    },
-    {
-      role: "Financial Advisors",
-      stories: [
-        "As a Financial Advisors, I want to review my clients' personalized investment portfolio suggestions so that I can provide tailored advice and recommendations.",
-        "As a Financial Advisors, I need to access real-time stock and crypto tracking data to stay informed about my clients' investments and market trends so that I can make timely and informed decisions.",
-        "As a Financial Advisors, I should be able to monitor my clients' portfolio performance and receive risk analysis alerts so that I can proactively address any potential issues and adjust their investment strategies.",
-      ],
-    },
-  ];
+    if (storedProjectId) {
+      console.log("🎯 Using project ID from localStorage:", storedProjectId);
+      setProjectId(storedProjectId);
+      loadProjectData(storedProjectId);
+    } else {
+      console.log("⚠️ No project ID found, using fallback data");
+      setProjectId("1aea2b0d-1c3a-400f-8c84-a1fa9d8c6758");
+      setUseFallback(true);
+      setProjectData(FALLBACK_PROJECT_DATA);
+      setLoading(false);
+    }
+  }, []);
 
-  const wireframes = [
-    { id: 1, name: "Wireframe Page A", image: "/wireframe-a.png" },
-    { id: 2, name: "Wireframe Page B", image: "/wireframe-b.png" },
-    { id: 3, name: "Wireframe Page C", image: "/wireframe-c.png" },
-  ];
+  const loadProjectData = async (projectId: string) => {
+    try {
+      setLoading(true);
+      setError("");
+      console.log("🚀 Loading project data from backend...");
 
-  const scenarios = [
-    {
-      story: "Individual Users_story_1",
-      scenarios: [
-        {
-          title: "Scenario 1: link my bank accounts when HTML structure is missing or malformed",
-          steps: [
-            "Given the individual users is on the related HTML page",
-            "But the system could not detect expected UI elements",
-            "When the individual users tries to perform link my bank accounts",
-            "Then the system should handle gracefully",
-            "And provide explicit fallbacks, default components, or instructions to the user",
-          ],
-        },
-        {
-          title: "Scenario 2: Successful link my bank accounts",
-          steps: [
-            "Given the individual users is on the related HTML page",
-            "And the page is assumed to have: form fields, buttons, links",
-            "When the individual users interacts correctly with form fields, buttons, links",
-            "Then the system should complete link my bank accounts successfully",
-            "And the individual users achieves the goal: the system can automatically track and categorize my transactions",
-          ],
-        },
-      ],
-    },
-  ];
+      const preview = await exportService.getExportPreview(projectId, {
+        include_stories: true,
+        include_wireframes: true,
+        include_scenarios: true,
+      });
 
-  // Handle export selection changes
+      console.log("✅ Backend response:", preview);
+
+      if (preview.success) {
+        setProjectData(preview.data);
+        console.log("📊 Real data loaded successfully");
+      } else {
+        throw new Error(preview.error || "Failed to load data from backend");
+      }
+    } catch (error: any) {
+      console.error("❌ Backend connection failed:", error);
+      setError("Cannot connect to backend server. Using demo data.");
+      setUseFallback(true);
+      setProjectData(FALLBACK_PROJECT_DATA);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleExportSelectionChange = (type: keyof typeof exportSelection) => {
     setExportSelection((prev) => ({
       ...prev,
@@ -75,7 +136,6 @@ export default function PreviewFinal() {
     }));
   };
 
-  // Select all / deselect all
   const handleSelectAll = (select: boolean) => {
     setExportSelection({
       userStories: select,
@@ -84,8 +144,18 @@ export default function PreviewFinal() {
     });
   };
 
-  // Handle export logic
-  const handleExport = () => {
+  const handleExport = async () => {
+    if (!projectId) {
+      alert("No project selected");
+      return;
+    }
+
+    // Pastikan projectData tidak null
+    if (!projectData) {
+      alert("No project data available");
+      return;
+    }
+
     const selectedTypes = Object.entries(exportSelection)
       .filter(([_, selected]) => selected)
       .map(([type]) => type);
@@ -95,20 +165,87 @@ export default function PreviewFinal() {
       return;
     }
 
-    console.log("Exporting selected items:", exportSelection);
+    try {
+      setExporting(true);
 
-    // Show confirmation with selected items
-    const selectedItems = selectedTypes
-      .join(", ")
-      .replace(/([A-Z])/g, " $1")
-      .toLowerCase();
-    alert(`Exporting ${selectedItems} as ZIP file...`);
+      const exportConfig: ExportConfig = {
+        include_stories: exportSelection.userStories,
+        include_wireframes: exportSelection.wireframes,
+        include_scenarios: exportSelection.scenarios,
+        format: "zip",
+      };
 
-    // Here you would implement the actual export logic
-    // For example: generateZip(exportSelection, projectData);
+      console.log("📦 Starting export with config:", exportConfig);
+
+      let blob: Blob;
+
+      if (useFallback) {
+        console.log("🔧 Using fallback export");
+        // Gunakan non-null assertion karena kita sudah check !projectData di atas
+        blob = await exportService.exportFallbackProject(projectData!, exportConfig);
+      } else {
+        console.log("🚀 Using backend export");
+        // Use normal backend export
+        blob = await exportService.exportProject(projectId, exportConfig);
+      }
+
+      const fileName = `${projectData.title.replace(/\s+/g, "_")}_export.zip`;
+
+      exportService.downloadFile(blob, fileName);
+
+      if (useFallback) {
+        alert("✅ Demo export completed successfully! This was generated locally since backend is unavailable.");
+      } else {
+        alert("✅ Export completed successfully!");
+      }
+    } catch (error: any) {
+      console.error("Export failed:", error);
+      alert(`❌ Export failed: ${error.message}`);
+    } finally {
+      setExporting(false);
+    }
   };
 
-  // Check if all items are selected
+  const formatStoriesData = (stories: any[]) => {
+    const grouped: { [key: string]: string[] } = {};
+
+    stories.forEach((story) => {
+      const role = story.role || "General";
+      if (!grouped[role]) {
+        grouped[role] = [];
+      }
+      grouped[role].push(`As a ${story.role}, ${story.action} so that ${story.benefit}`);
+    });
+
+    return Object.entries(grouped).map(([role, stories]) => ({
+      role,
+      stories,
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">Loading project data...</div>
+      </div>
+    );
+  }
+
+  if (!projectData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg text-red-600">
+          Failed to load project data
+          {error && <div className="text-sm mt-2">{error}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  const userStories = formatStoriesData(projectData.user_stories || []);
+  const wireframes = projectData.wireframes || [];
+  const scenarios = projectData.scenarios || [];
+
   const allSelected = Object.values(exportSelection).every(Boolean);
   const someSelected = Object.values(exportSelection).some(Boolean);
 
@@ -116,121 +253,161 @@ export default function PreviewFinal() {
     <div className="min-h-screen flex flex-col bg-white">
       <Header />
 
+      {error && (
+        <div className="bg-red-100 border-l-4 border-red-500 p-4">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">❌</div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">
+                <strong>Connection Issue:</strong> {error}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {useFallback && !error && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">🔧</div>
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                <strong>Demo Mode:</strong> Showing sample data. Connect to backend for real project data.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="flex-1 py-12 bg-white">
         <div className="max-w-7xl mx-auto px-8">
-          {/* Page Title */}
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Preview & Export</h1>
-            <p className="text-lg text-gray-600">Project: {projectTitle}</p>
+            <p className="text-lg text-gray-600">Project: {projectData.title}</p>
+            <p className="text-sm text-gray-500">Domain: {projectData.domain}</p>
+            <p className="text-sm text-gray-500">Objective: {projectData.objective}</p>
+            {useFallback && <p className="text-xs text-yellow-600">Using demo data - Project ID: {projectId}</p>}
           </div>
 
-          {/* Tab Navigation */}
           <div className="flex space-x-1 mb-8 border-b-2 border-gray-200">
             <button
               onClick={() => setActiveTab("stories")}
               className={`px-6 py-3 font-semibold text-base transition-all ${activeTab === "stories" ? "text-[#5F3D89] border-b-4 border-[#5F3D89] -mb-[2px]" : "text-gray-600 hover:text-gray-900"}`}
             >
-              User Stories
+              User Stories ({userStories.reduce((acc, group) => acc + group.stories.length, 0)})
             </button>
             <button
               onClick={() => setActiveTab("wireframes")}
               className={`px-6 py-3 font-semibold text-base transition-all ${activeTab === "wireframes" ? "text-[#5F3D89] border-b-4 border-[#5F3D89] -mb-[2px]" : "text-gray-600 hover:text-gray-900"}`}
             >
-              Wireframes
+              Wireframes ({wireframes.length})
             </button>
             <button
               onClick={() => setActiveTab("scenarios")}
               className={`px-6 py-3 font-semibold text-base transition-all ${activeTab === "scenarios" ? "text-[#5F3D89] border-b-4 border-[#5F3D89] -mb-[2px]" : "text-gray-600 hover:text-gray-900"}`}
             >
-              Test Scenarios
+              Test Scenarios ({scenarios.length})
             </button>
           </div>
 
-          {/* Tab Content */}
           <div className="min-h-[500px]">
-            {/* User Stories Tab */}
             {activeTab === "stories" && (
               <div className="space-y-8">
-                {userStories.map((group, idx) => (
-                  <div key={idx} className="space-y-4">
-                    <h2 className="text-2xl font-bold text-gray-900 underline">{group.role}</h2>
-                    <div className="bg-white border-2 border-gray-300 rounded-2xl p-6">
-                      <ol className="list-decimal list-inside space-y-3">
-                        {group.stories.map((story, storyIdx) => (
-                          <li key={storyIdx} className="text-base text-gray-800 leading-relaxed">
-                            {story}
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
+                {userStories.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500">No user stories available</p>
                   </div>
-                ))}
+                ) : (
+                  userStories.map((group, idx) => (
+                    <div key={idx} className="space-y-4">
+                      <h2 className="text-2xl font-bold text-gray-900 underline">{group.role}</h2>
+                      <div className="bg-white border-2 border-gray-300 rounded-2xl p-6">
+                        <ol className="list-decimal list-inside space-y-3">
+                          {group.stories.map((story, storyIdx) => (
+                            <li key={storyIdx} className="text-base text-gray-800 leading-relaxed">
+                              {story}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             )}
 
-            {/* Wireframes Tab */}
             {activeTab === "wireframes" && (
               <div className="space-y-8">
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {wireframes.map((wireframe) => (
-                    <div key={wireframe.id} className="bg-white border-2 border-gray-300 rounded-2xl overflow-hidden hover:shadow-lg transition">
-                      <div className="aspect-[3/4] bg-gray-200 flex items-center justify-center">
-                        {/* Placeholder for wireframe image */}
-                        <div className="text-center p-6">
-                          <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                            />
-                          </svg>
-                          <p className="text-sm text-gray-500">{wireframe.name}</p>
+                {wireframes.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500">No wireframes available</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {wireframes.map((wireframe, index) => (
+                        <div key={index} className="bg-white border-2 border-gray-300 rounded-2xl overflow-hidden hover:shadow-lg transition">
+                          <div className="aspect-[3/4] bg-gray-200 flex items-center justify-center">
+                            <div className="text-center p-6">
+                              <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                />
+                              </svg>
+                              <p className="text-sm text-gray-500">{wireframe.title || "Untitled Wireframe"}</p>
+                            </div>
+                          </div>
+                          <div className="p-4 bg-white">
+                            <h3 className="font-semibold text-gray-900">{wireframe.title || "Untitled Wireframe"}</h3>
+                            <p className="text-sm text-gray-600 mt-1">{wireframe.description || "No description"}</p>
+                            {wireframe.page_type && <p className="text-xs text-gray-500 mt-1">Type: {wireframe.page_type}</p>}
+                          </div>
                         </div>
-                      </div>
-                      <div className="p-4 bg-white">
-                        <h3 className="font-semibold text-gray-900">{wireframe.name}</h3>
-                        <button className="mt-2 text-sm text-[#5F3D89] hover:underline">View Full Size</button>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <div className="bg-blue-50 border-l-4 border-[#5F3D89] p-4 rounded">
-                  <p className="text-sm text-gray-700">
-                    <strong>Note:</strong> All wireframes are generated as PNG files and included in the export package.
-                  </p>
-                </div>
+                    <div className="bg-blue-50 border-l-4 border-[#5F3D89] p-4 rounded">
+                      <p className="text-sm text-gray-700">
+                        <strong>Note:</strong> All wireframes are generated as PNG files and included in the export package.
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
-            {/* Test Scenarios Tab */}
             {activeTab === "scenarios" && (
               <div className="space-y-8">
-                {scenarios.map((storyScenarios, idx) => (
-                  <div key={idx} className="space-y-4">
-                    <h2 className="text-2xl font-bold text-gray-900">{storyScenarios.story}</h2>
-                    {storyScenarios.scenarios.map((scenario, scenarioIdx) => (
-                      <div key={scenarioIdx} className="bg-white border-2 border-gray-300 rounded-2xl p-6 space-y-3">
+                {scenarios.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500">No test scenarios available</p>
+                  </div>
+                ) : (
+                  scenarios.map((scenario, idx) => (
+                    <div key={idx} className="space-y-4">
+                      <h2 className="text-2xl font-bold text-gray-900">{scenario.title}</h2>
+                      <div className="bg-white border-2 border-gray-300 rounded-2xl p-6 space-y-3">
                         <h3 className="font-semibold text-lg text-gray-900">{scenario.title}</h3>
+                        <p className="text-gray-700">{scenario.description}</p>
                         <div className="pl-4 space-y-2 text-sm text-gray-800 leading-relaxed">
-                          {scenario.steps.map((step, stepIdx) => (
-                            <p key={stepIdx}>{step}</p>
-                          ))}
+                          {scenario.given_steps && scenario.given_steps.split("\n").map((step: string, stepIdx: number) => step.trim() && <p key={stepIdx}>Given {step.trim()}</p>)}
+                          {scenario.when_steps && scenario.when_steps.split("\n").map((step: string, stepIdx: number) => step.trim() && <p key={stepIdx}>When {step.trim()}</p>)}
+                          {scenario.then_steps && scenario.then_steps.split("\n").map((step: string, stepIdx: number) => step.trim() && <p key={stepIdx}>Then {step.trim()}</p>)}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ))}
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
 
-          {/* Export Selection Section */}
           <div className="mt-12 pt-8 border-t-2 border-gray-200">
             <div className="bg-gray-50 rounded-xl p-6 mb-6">
               <h3 className="text-2xl font-bold text-gray-900 mb-4">Select Export Content</h3>
 
-              {/* Select All Controls */}
               <div className="flex items-center justify-between mb-4 p-3 bg-white rounded-lg border border-gray-200">
                 <span className="font-semibold text-gray-700">Select All</span>
                 <div className="flex space-x-2">
@@ -243,9 +420,7 @@ export default function PreviewFinal() {
                 </div>
               </div>
 
-              {/* Export Options */}
               <div className="grid md:grid-cols-3 gap-4">
-                {/* User Stories Option */}
                 <div
                   className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${exportSelection.userStories ? "border-[#5F3D89] bg-purple-50" : "border-gray-300 bg-white"}`}
                   onClick={() => handleExportSelectionChange("userStories")}
@@ -260,7 +435,6 @@ export default function PreviewFinal() {
                   </div>
                 </div>
 
-                {/* Wireframes Option */}
                 <div className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${exportSelection.wireframes ? "border-[#5F3D89] bg-purple-50" : "border-gray-300 bg-white"}`} onClick={() => handleExportSelectionChange("wireframes")}>
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-bold text-gray-900">Wireframes</h4>
@@ -272,7 +446,6 @@ export default function PreviewFinal() {
                   </div>
                 </div>
 
-                {/* Test Scenarios Option */}
                 <div className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${exportSelection.scenarios ? "border-[#5F3D89] bg-purple-50" : "border-gray-300 bg-white"}`} onClick={() => handleExportSelectionChange("scenarios")}>
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-bold text-gray-900">Test Scenarios</h4>
@@ -280,12 +453,11 @@ export default function PreviewFinal() {
                   </div>
                   <p className="text-sm text-gray-600 mb-2">Export all test scenarios as Gherkin files</p>
                   <div className="text-xs text-gray-500">
-                    <span className="font-semibold">Includes:</span> {scenarios.reduce((acc, story) => acc + story.scenarios.length, 0)} scenarios
+                    <span className="font-semibold">Includes:</span> {scenarios.length} scenarios
                   </div>
                 </div>
               </div>
 
-              {/* Selection Summary */}
               <div className="mt-4 p-3 bg-white rounded-lg border border-gray-200">
                 <p className="text-sm text-gray-700">
                   <strong>Selected for export:</strong>{" "}
@@ -297,59 +469,38 @@ export default function PreviewFinal() {
               </div>
             </div>
 
-            {/* Export Actions */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="space-y-2">
-                <h3 className="text-2xl font-bold text-gray-900">Ready to Export?</h3>
+                <h3 className="text-2xl font-bold text-gray-900">{exporting ? "Exporting..." : "Ready to Export?"}</h3>
                 <p className="text-gray-600">{someSelected ? "Download your selected documentation in a single ZIP package." : "Select the items you want to export above."}</p>
+                {useFallback && <p className="text-sm text-yellow-600">⚠️ Real export requires backend connection</p>}
               </div>
               <div className="flex space-x-4">
-                <button 
-                  onClick={() => window.history.back()} 
-                  className="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold text-base hover:bg-gray-50 transition">
+                <button onClick={() => window.history.back()} className="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold text-base hover:bg-gray-50 transition" disabled={exporting}>
                   Go Back
                 </button>
                 <button
                   onClick={handleExport}
-                  disabled={!someSelected}
-                  className={`px-8 py-4 rounded-lg font-semibold text-base transition shadow-lg flex items-center space-x-2 ${someSelected ? "bg-[#5F3D89] text-white hover:bg-opacity-90" : "bg-gray-300 text-gray-500 cursor-not-allowed"}`}
+                  disabled={!someSelected || exporting}
+                  className={`px-8 py-4 rounded-lg font-semibold text-base transition shadow-lg flex items-center space-x-2 ${
+                    someSelected && !exporting ? (useFallback ? "bg-yellow-600 text-white hover:bg-yellow-700" : "bg-[#5F3D89] text-white hover:bg-opacity-90") : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  <span>Export as ZIP</span>
+                  {exporting ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Exporting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      <span>{useFallback ? "Export Demo (Local)" : "Export as ZIP"}</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </div>
-          </div>
-
-          {/* File Structure Info */}
-          <div className="mt-8 bg-gray-50 rounded-xl p-6">
-            <h4 className="font-bold text-gray-900 mb-4">Export Package Structure:</h4>
-            <div className="font-mono text-sm text-gray-700 space-y-1">
-              <div>📁 {projectTitle.replace(/\s+/g, "_")}/</div>
-              {exportSelection.userStories && <div className="pl-6">📄 user_stories.md</div>}
-              {exportSelection.wireframes && (
-                <>
-                  <div className="pl-6">📁 wireframes/</div>
-                  {wireframes.map((wf) => (
-                    <div key={wf.id} className="pl-12">
-                      🖼️ {wf.name.toLowerCase().replace(/\s+/g, "_")}.png
-                    </div>
-                  ))}
-                </>
-              )}
-              {exportSelection.scenarios && (
-                <>
-                  <div className="pl-6">📁 test_scenarios/</div>
-                  {scenarios.map((scenario, idx) => (
-                    <div key={idx} className="pl-12">
-                      📄 {scenario.story.toLowerCase().replace(/\s+/g, "_")}.feature
-                    </div>
-                  ))}
-                </>
-              )}
-              <div className="pl-6">📄 README.md</div>
             </div>
           </div>
         </div>
