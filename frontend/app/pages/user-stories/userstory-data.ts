@@ -21,12 +21,67 @@ export const DEFAULT_STORY: StorySections = {
 };
 
 const STORAGE_KEY = "storycanvas.userstory";
+const API_BASE = process.env.VITE_API_BASE || 'http://localhost:8000/api';
+
+// Types for API responses
+export interface UserStoryPageStatus {
+  is_accepted: boolean;
+  accepted_at: string | null;
+  version: number;
+  has_content: boolean;
+}
+
+export interface UserStoryPageResponse {
+  id: string;
+  project_id: string;
+  version: number;
+  is_accepted: boolean;
+  accepted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  individual: string;
+  advisors: string;
+  managers: string;
+  admins: string;
+  project?: {
+    project_id: string;
+    title: string;
+    status: string;
+  };
+}
 
 function canUseDOM() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
-export function loadStory(): StorySections {
+// ========== UPDATED FUNCTIONS WITH API INTEGRATION ==========
+
+/**
+ * Load story from API with localStorage fallback
+ */
+export async function loadStory(projectId?: string): Promise<StorySections> {
+  // If projectId is provided, try to load from API
+  if (projectId) {
+    try {
+      const response = await fetch(`${API_BASE}/projects/${projectId}/user-story-page/`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+          // Also save to localStorage for offline access
+          if (canUseDOM()) {
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data.data));
+          }
+          return data.data;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load from API, falling back to localStorage:', error);
+    }
+  }
+  
+  // Fallback to localStorage
   try {
     if (!canUseDOM()) return DEFAULT_STORY;
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -43,10 +98,156 @@ export function loadStory(): StorySections {
   }
 }
 
-export function saveStory(data: StorySections) {
-  if (!canUseDOM()) return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+/**
+ * Save story to API and localStorage
+ */
+export async function saveStory(data: StorySections, projectId?: string): Promise<boolean> {
+  // Save to localStorage first for immediate access
+  if (canUseDOM()) {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+  
+  // If projectId is provided, also save to API
+  if (projectId) {
+    try {
+      const response = await fetch(`${API_BASE}/projects/${projectId}/user-story-page/update/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          individual: data.individual,
+          advisors: data.advisors,
+          managers: data.managers,
+          admins: data.admins,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        return result.success;
+      }
+    } catch (error) {
+      console.warn('Failed to save to API, data saved locally:', error);
+      // Data is already saved to localStorage, so return true
+      return true;
+    }
+  }
+  
+  return true; // Success for localStorage-only save
 }
+
+/**
+ * Create new user story page via API
+ */
+export async function createStory(projectId: string, data: StorySections): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/user-story-page/create/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        individual: data.individual,
+        advisors: data.advisors,
+        managers: data.managers,
+        admins: data.admins,
+      }),
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      // Also save to localStorage
+      if (canUseDOM() && result.success) {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+      return result.success;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error creating user stories:', error);
+    return false;
+  }
+}
+
+/**
+ * Accept user story page
+ */
+export async function acceptStory(projectId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/user-story-page/accept/`, {
+      method: 'POST',
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      return result.success;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error accepting user stories:', error);
+    return false;
+  }
+}
+
+/**
+ * Get user story page status
+ */
+export async function getStoryStatus(projectId: string): Promise<UserStoryPageStatus | null> {
+  try {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/user-story-page/status/`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.success ? data.data : null;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting story status:', error);
+    return null;
+  }
+}
+
+// ========== UTILITY FUNCTIONS ==========
+
+/**
+ * Parse story text into array of individual stories
+ */
+export function parseStoryText(text: string): string[] {
+  return text.split('\n')
+    .filter(line => line.trim())
+    .map(line => line.replace(/^\d+\.\s*/, '').trim());
+}
+
+/**
+ * Format array of stories into numbered text
+ */
+export function formatStoryText(stories: string[]): string {
+  return stories.map((story, index) => `${index + 1}. ${story}`).join('\n');
+}
+
+/**
+ * Check if stories are valid (not empty)
+ */
+export function hasValidStories(storyData: StorySections): boolean {
+  const roles: (keyof StorySections)[] = ['individual', 'advisors', 'managers', 'admins'];
+  return roles.some(role => {
+    const stories = parseStoryText(storyData[role]);
+    return stories.length > 0 && stories.some(story => story.length > 10);
+  });
+}
+
+/**
+ * Check if stories are different from default
+ */
+export function hasChanges(storyData: StorySections): boolean {
+  return storyData.individual !== DEFAULT_STORY.individual ||
+         storyData.advisors !== DEFAULT_STORY.advisors ||
+         storyData.managers !== DEFAULT_STORY.managers ||
+         storyData.admins !== DEFAULT_STORY.admins;
+}
+
+// ========== AI SUGGESTION FUNCTION (KEEP EXISTING) ==========
 
 // Simple mock AI rewriter. If VITE_AI_ENDPOINT is present, it will try to POST there.
 export async function requestAISuggestion(message: string, currentText: string): Promise<string> {
@@ -80,4 +281,3 @@ export async function requestAISuggestion(message: string, currentText: string):
   // Add a little hint it was updated based on the prompt
   return fixed.join("\n");
 }
-

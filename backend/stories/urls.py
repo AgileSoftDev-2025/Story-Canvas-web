@@ -121,6 +121,23 @@ urlpatterns = [
     path('api/user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
     path('api/user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
     # User Stories endpoints
+    path('user-stories/', get_user_stories, name='get_user_stories'),
+    path('user-stories/create/', create_user_story, name='create_user_story'),
+    path('user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
+    path('user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
+    path('user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
+    path('user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
+    path('user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
+
+    # ========== COMMENT/HAPUS USER STORY PAGE ENDPOINTS (SEMENTARA) ==========
+    # path('projects/<str:project_id>/user-story-page/', get_user_story_page, name='get_user_story_page'),
+    # path('projects/<str:project_id>/user-story-page/create/', create_user_story_page, name='create_user_story_page'),
+    # path('projects/<str:project_id>/user-story-page/update/', update_user_story_page, name='update_user_story_page'),
+    # path('projects/<str:project_id>/user-story-page/accept/', accept_user_story_page, name='accept_user_story_page'),
+    # path('projects/<str:project_id>/user-story-page/status/', get_user_story_page_status, name='get_user_story_page_status'),
+
+    # ========== PROJECT-SPECIFIC USER STORIES ==========
+    path('projects/<str:project_id>/user-stories/', get_project_user_stories, name='get_project_user_stories'),
     path('api/user-stories/', get_user_stories, name='get_user_stories'),
     path('api/user-stories/create/', create_user_story, name='create_user_story'),
     path('api/user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),

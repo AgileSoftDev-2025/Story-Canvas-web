@@ -28,9 +28,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
+    
     # Third party apps
     'rest_framework',
+    'rest_framework_simplejwt',  # ✅ TAMBAHKAN INI
     'corsheaders',  # Optional: for frontend integration
     
     # Your apps
@@ -48,7 +49,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'your_project.urls'
+# ✅ PERBAIKI INI - sesuaikan dengan nama project Anda
+ROOT_URLCONF = 'stories.urls'  # atau 'your_project.urls' sesuail dengan struktur
 
 TEMPLATES = [
     {
@@ -66,7 +68,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'your_project.wsgi.application'
+# ✅ PERBAIKI INI - sesuaikan dengan nama project Anda
+WSGI_APPLICATION = 'stories.wsgi.application'  # atau 'your_project.wsgi.application'
 
 # Database
 DATABASES = {
@@ -127,16 +130,30 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     
-    # Optional: Authentication settings
+    # ✅ PERBAIKI: Tambahkan JWT Authentication
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
     ],
     
     # Optional: Permission settings
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
+}
+
+# ============================
+# SIMPLE JWT CONFIGURATION
+# ============================
+
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 # ============================
@@ -147,31 +164,11 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # React dev server
     "http://127.0.0.1:3000",
+    "http://localhost:5173",  # Vite dev server
+    "http://127.0.0.1:5173",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True  # Untuk development
-CORS_ALLOW_CREDENTIALS = True
-
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET', 
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only in development
 
 # ============================
 # LOGGING CONFIGURATION
