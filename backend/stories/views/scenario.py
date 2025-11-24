@@ -4,6 +4,26 @@ from stories.utils.decorators import api_view
 from stories.models import UserStory, Scenario, Project
 from stories.utils.scenario_generator import ScenarioGenerator
 import json
+from stories.services.scenario_services import ScenarioService
+
+def get_project_scenarios(request, project_id):
+    """Get scenarios for a project"""
+    try:
+        print(f"🔍 [DJANGO VIEW] get_project_scenarios called for project: {project_id}")
+        
+        scenario_service = ScenarioService()
+        result = scenario_service.get_project_scenarios(project_id)
+        
+        print(f"✅ [DJANGO VIEW] Service result: {result}")
+        
+        return JsonResponse(result)
+    except Exception as e:
+        error_msg = f'Error fetching project scenarios: {str(e)}'
+        print(f"💥 [DJANGO VIEW] {error_msg}")
+        return JsonResponse({
+            'success': False, 
+            'error': error_msg
+        }, status=500)
 
 # Simple serializer untuk menghindari import issues
 class SimpleScenarioSerializer:

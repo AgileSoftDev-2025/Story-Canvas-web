@@ -13,5 +13,5 @@ export default [
   route("UserStoryEditPage", "routes/userstory-edit.tsx"),
   route("HistoryDetail", "routes/HistoryDetail.tsx"),
   route("PreviewFinal", "routes/preview.tsx"),
-  route("HasilGenerate", "routes/hasilgenerate.tsx"),
+  route("HasilGenerate/:projectId", "routes/hasilgenerate.tsx"),
 ] satisfies RouteConfig;

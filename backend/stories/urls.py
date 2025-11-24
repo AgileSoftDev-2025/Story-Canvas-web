@@ -30,7 +30,12 @@ from stories.generation_views import (
     generate_salt_diagram, render_png_diagram, ai_edit_wireframe
 )
 
+from django.contrib import admin
+from django.urls import path, include
+
 urlpatterns = [
+    
+    path('admin/', admin.site.urls),
     #auth endpoints
     path('api/auth/debug-signin/', debug_signin, name='debug_signin'),
     path('api/auth/signup/', signup, name='signup'),
@@ -134,4 +139,11 @@ urlpatterns = [
     path('api/wireframes/<str:wireframe_id>/generate-salt-diagram/', generate_salt_diagram, name='generate_salt_diagram'),
     path('api/wireframes/<str:wireframe_id>/render-png-diagram/', render_png_diagram, name='render_png_diagram'),
     path('api/wireframes/<str:wireframe_id>/ai-edit/', ai_edit_wireframe, name='ai_edit_wireframe'),
+    
+    # Export preview endpoints
+    path('exports/preview/<str:export_id>/', preview_export_by_id, name='preview-export-by-id'),
+    path('projects/<str:project_id>/export-preview/', preview_project_export, name='preview-project-export'),
+    path('projects/<str:project_id>/generate-export-preview/', generate_export_preview, name='generate-export-preview'),
+    path('exports/my-exports/', list_user_exports, name='list-user-exports'),
+    
 ]
