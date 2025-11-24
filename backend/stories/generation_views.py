@@ -382,7 +382,9 @@ def generate_user_stories(request, project_id):
         project = Project.objects.get(project_id=project_id)
         rag_db = ProjectRAGVectorDB()
         project_info = _prepare_project_info(project)
-        user_stories_data = _generate_user_stories_with_rag(project_info, rag_db)
+        
+        # Pass the real project object to the generator
+        user_stories_data = _generate_user_stories_with_rag(project_info, rag_db, project)
         saved_stories = _save_user_stories(project, user_stories_data)
         
         session = _create_session(project, stories=len(saved_stories))
@@ -406,17 +408,16 @@ def generate_user_stories(request, project_id):
             'success': False,
             'error': str(e)
         }, status=500)
-
+    
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def generate_wireframes(request, project_id):
     """
-    Generates HTML wireframes for all user stories in this project.
-    (Step 2 of the pipeline)
+    Generates HTML wireframes for all user stories in this project PLUS langsung generate Creole & Salt UML
     POST /api/projects/{project_id}/generate-wireframes/
     """
     try:
-        project = UserStory.objects.get(story_id=project_id)
+        project = Project.objects.get(project_id=project_id)
         rag_db = ProjectRAGVectorDB()
         user_stories = project.user_stories.all()
         
@@ -426,16 +427,17 @@ def generate_wireframes(request, project_id):
                 'error': 'No user stories found. Generate user stories first.'
             }, status=400)
         
+        # Generate HTML wireframes dengan RAG
         html_docs = _generate_wireframes_with_rag(project, user_stories, rag_db)
-        saved_wireframes = _save_wireframes(project, html_docs)
+        saved_wireframes = _save_wireframes_with_creole_salt(project, html_docs)
         
         session = _create_session(project, wireframes=len(saved_wireframes))
         _create_history(session, 'wireframes_generated',
-                         f'Generated {len(saved_wireframes)} wireframes')
+                         f'Generated {len(saved_wireframes)} wireframes with Creole+Salt')
         
         return JsonResponse({
             'success': True,
-            'message': f'Generated {len(saved_wireframes)} wireframes',
+            'message': f'Generated {len(saved_wireframes)} wireframes with Creole and Salt UML',
             'wireframes': WireframeSerializer(saved_wireframes, many=True).data
         }, status=200)
         
@@ -450,6 +452,47 @@ def generate_wireframes(request, project_id):
             'error': str(e)
         }, status=500)
 
+def _save_wireframes_with_creole_salt(project, html_docs):
+    """Saves generated HTML wireframes PLUS langsung generate Creole dan Salt UML"""
+    saved_wireframes = []
+    
+    # Hapus wireframes lama
+    project.wireframes.all().delete()
+    
+    for page_name, html_content in html_docs.get("role_pages", {}).items():
+        try:
+            # 1. Generate Creole dari HTML
+            creole_content = convert_html_to_creole(html_content)
+            
+            # 2. Generate Salt UML dari Creole
+            salt_diagram = generate_salt_wireframe(creole_content, page_name)
+            
+            # 3. Simpan semua ke database
+            wireframe = Wireframe.objects.create(
+                project=project,
+                page_name=page_name,
+                html_content=html_content,
+                creole_content=creole_content,
+                salt_diagram=salt_diagram,
+                version=1,
+            )
+            saved_wireframes.append(wireframe)
+            
+            print(f"✅ Saved wireframe with Creole+Salt: {page_name}")
+            
+        except Exception as e:
+            print(f"⚠️ Error saving wireframe {page_name}: {e}")
+            # Fallback: simpan HTML saja tanpa Creole/Salt
+            wireframe = Wireframe.objects.create(
+                project=project,
+                page_name=page_name,
+                html_content=html_content,
+                version=1,
+            )
+            saved_wireframes.append(wireframe)
+    
+    return saved_wireframes
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def generate_scenarios(request, project_id):
@@ -459,7 +502,8 @@ def generate_scenarios(request, project_id):
     POST /api/projects/{project_id}/generate-scenarios/
     """
     try:
-        project = UserStory.objects.get(story_id=project_id)
+        # ✅ FIX: Use Project model instead of UserStory
+        project = Project.objects.get(project_id=project_id)
         user_stories = project.user_stories.all()
         
         if not user_stories.exists():
@@ -483,13 +527,21 @@ def generate_scenarios(request, project_id):
             page_name = _find_page_for_story(user_story, wireframes)
             html_content = wireframes.get(page_name)
             
+            print(f"🎯 Generating scenarios for user story: {user_story.story_id}")
+            print(f"   Page: {page_name}, HTML content: {'Yes' if html_content else 'No'}")
+            
             scenarios = scenario_generator.generate_comprehensive_scenarios(
                 user_story=user_story, 
                 html_content=html_content
             )
+            
+            print(f"   Generated {len(scenarios)} scenario templates")
+            
             saved_scenarios = _save_scenarios(user_story, scenarios)
             scenarios_generated += len(saved_scenarios)
             all_saved_scenarios.extend(saved_scenarios)
+            
+            print(f"   ✅ Saved {len(saved_scenarios)} scenarios to database")
         
         session = _create_session(project, scenarios=scenarios_generated)
         _create_history(session, 'scenarios_generated',
@@ -507,6 +559,7 @@ def generate_scenarios(request, project_id):
             'error': 'Project not found'
         }, status=404)
     except Exception as e:
+        print(f"❌ Error in generate_scenarios: {e}")
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -978,24 +1031,29 @@ def _prepare_project_info(project):
         'additional_info': project.additional_info
     }
 
-def _generate_user_stories_with_rag(project_info, rag_db):
-    """Calls the UserStoryGenerator"""
+def _generate_user_stories_with_rag(project_info, rag_db, real_project):
+    """Generate user stories using the existing generator method"""
     generator = UserStoryGenerator()
-    project_desc = generator.format_project_description(project_info)
-    analysis = analyze_project_description(project_desc)
-    patterns = rag_db.retrieve_similar_patterns(project_desc, k=3)
     
-    print(f"Project Description: {project_desc}")  # Debug
-    print(f"Analysis: {analysis}")  # Debug
-    print(f"Patterns found: {len(patterns)}")  # Debug
+
+    real_project.users_data = project_info['users']
+    real_project.features_data = project_info['features']
     
-    stories = generator.generate_comprehensive_user_stories(project_info, analysis, patterns)
+    # Use the existing generator method with the REAL project
+    user_stories = generator.generate_user_stories_for_project(real_project, rag_db)
     
-    print(f"Generated stories: {len(stories)}")  # Debug
-    for i, story in enumerate(stories):
-        print(f"Story {i}: {story}")  # Debug
+    # Convert to the expected format for _save_user_stories
+    stories_data = []
+    for story in user_stories:
+        stories_data.append({
+            'text': story.story_text,
+            'role': story.role,
+            'feature': story.feature,
+            'acceptance_criteria': story.acceptance_criteria,
+            'priority': story.priority
+        })
     
-    return stories
+    return stories_data
 
 def _save_user_stories(project, stories_data):
     """Saves the generated story dicts as UserStory models."""
@@ -1028,40 +1086,104 @@ def _save_user_stories(project, stories_data):
     return saved_stories
 
 def _generate_wireframes_with_rag(project, user_stories, rag_db):
-    """Calls the WireframeGenerator"""
+    """Calls the WireframeGenerator with proper data formatting"""
     generator = WireframeGenerator()
     project_info = _prepare_project_info(project)
-    return generator.generate_html_documentation(project_info, user_stories, rag_db)
+    
+    # Convert UserStory objects to simple dict format
+    user_stories_data = []
+    for story in user_stories:
+        user_stories_data.append({
+            'text': story.story_text,
+            'role': story.role,
+            'feature': story.feature,
+            'acceptance_criteria': story.acceptance_criteria or [],
+            'priority': story.priority
+        })
+    
+    # Debug: Print what we're sending
+    print(f"DEBUG: Sending {len(user_stories_data)} stories to wireframe generator")
+    for i, story in enumerate(user_stories_data):
+        print(f"Story {i}: {story.get('text', 'NO TEXT')[:50]}...")
+    
+    return generator.generate_html_documentation(project_info, user_stories_data, rag_db)
 
 def _save_wireframes(project, html_docs):
-    """Saves the generated HTML dict as Wireframe models."""
+    """Saves the generated HTML dict as Wireframe models PLUS langsung generate Creole & Salt UML."""
     saved_wireframes = []
     project.wireframes.all().delete()
+    
     for page_name, html_content in html_docs.get("role_pages", {}).items():
-        wf = Wireframe.objects.create(
-            project=project,
-            page_name=page_name,
-            html_content=html_content,
-            version=1,
-            generated_by_llm=True
-        )
-        saved_wireframes.append(wf)
+        try:
+            # Generate Creole dari HTML
+            creole_content = convert_html_to_creole(html_content)
+            
+            # Generate Salt UML dari Creole
+            salt_diagram = generate_salt_wireframe(creole_content, page_name)
+            
+            # Simpan semua ke database
+            wf = Wireframe.objects.create(
+                project=project,
+                page_name=page_name,
+                html_content=html_content,
+                creole_content=creole_content,
+                salt_diagram=salt_diagram,
+                version=1,
+            )
+            saved_wireframes.append(wf)
+            print(f"✅ Saved wireframe with Creole+Salt: {page_name}")
+            
+        except Exception as e:
+            print(f"⚠️ Error generating Creole/Salt for {page_name}: {e}")
+            # Fallback: simpan HTML saja tanpa Creole/Salt
+            wf = Wireframe.objects.create(
+                project=project,
+                page_name=page_name,
+                html_content=html_content,
+                version=1,
+            )
+            saved_wireframes.append(wf)
+            print(f"✅ Saved wireframe (HTML only): {page_name}")
+    
+    print(f"📊 Total wireframes saved: {len(saved_wireframes)}")
+    print(f"📝 With Creole+Salt: {len([w for w in saved_wireframes if w.creole_content and w.salt_diagram])}")
+    
     return saved_wireframes
-
+    
 def _save_scenarios(user_story, scenarios_data):
     """Saves the generated scenario dicts as Scenario models."""
     saved = []
     user_story.scenarios.all().delete()
-    for data in scenarios_data:
-        scenario = Scenario.objects.create(
-            user_story=user_story,
-            scenario_text=data.get('scenario_text', ''),
-            scenario_type=data.get('scenario_type', 'happy_path'),
-            title=data.get('title', 'Scenario'),
-            detected_domain=data.get('detected_domain', 'general'),
-            enhanced_with_llm=data.get('enhanced_with_llm', False)
-        )
-        saved.append(scenario)
+    
+    print(f"🔍 Debug: User Story ID: {user_story.story_id}")
+    print(f"🔍 Debug: User Story Project ID: {user_story.project.project_id}")
+    
+    for i, data in enumerate(scenarios_data):
+        try:
+            print(f"🔍 Debug: Saving scenario {i+1}/{len(scenarios_data)}")
+            
+            # ISI project_id secara eksplisit
+            scenario = Scenario.objects.create(
+                user_story=user_story,
+                project_id=user_story.project.project_id,  # ✅ TAMBAHKAN INI
+                scenario_text=data.get('scenario_text', ''),
+                scenario_type=data.get('scenario_type', 'happy_path'),
+                title=data.get('title', 'Scenario'),
+                detected_domain=data.get('detected_domain', 'general'),
+                enhanced_with_llm=data.get('enhanced_with_llm', False),
+                has_proper_structure=data.get('has_proper_structure', True),
+                gherkin_steps=data.get('gherkin_steps', [])
+            )
+            saved.append(scenario)
+            print(f"✅ Saved scenario: {scenario.title} for project: {user_story.project.project_id}")
+            
+        except Exception as e:
+            print(f"❌ Error saving scenario {i+1}: {e}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    print(f"📊 Total scenarios saved: {len(saved)}")
     return saved
 
 def _find_page_for_story(story_model, wireframe_pages):

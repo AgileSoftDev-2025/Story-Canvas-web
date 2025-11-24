@@ -16,8 +16,6 @@ class UserStoryGenerator:
         """Call Replicate API model - EXACT SAME AS COLAB"""
         try:
             api_token = os.getenv('REPLICATE_API_TOKEN')
-            if not api_token or api_token == 'your_replicate_api_token_here':
-                raise Exception("Replicate API token not configured")
             
             client = replicate.Client(api_token=api_token)
             
@@ -645,11 +643,18 @@ Generate 2 user stories for {simple_role}:
 
     def format_project_description(self, project_info: Dict) -> str:
         """Format project description for LLM prompt - EXACT SAME AS COLAB"""
+    
+        def safe_join(items, separator=', '):
+            """Safely join items ensuring they are strings"""
+            if not items:
+                return 'None'
+            return separator.join(str(item) for item in items)
+        
         description = f"""
         Title: {project_info.get('title', 'Untitled Project')}
         Objective: {project_info.get('objective', 'Not specified')}
-        Users: {', '.join(project_info.get('users', []))}
-        Features: {', '.join(project_info.get('features', []))}
+        Users: {safe_join(project_info.get('users', []))}
+        Features: {safe_join(project_info.get('features', []))}
         Scope: {project_info.get('scope', 'Not specified')}
         Flow: {project_info.get('flow', 'Not specified')}
         Additional Information: {project_info.get('additional_info', 'None')}
@@ -659,15 +664,55 @@ Generate 2 user stories for {simple_role}:
     def generate_user_stories_for_project(self, project, rag_db=None):
         """Main method to generate user stories for a project with RAG integration"""
         try:
-            # Convert project to project_info format
+            # Safely extract users and features data
+            users_data = project.users_data or []
+            features_data = project.features_data or []
+            
+            # Convert to simple lists if they contain dictionaries
+            def extract_simple_list(data):
+                if not data:
+                    return []
+                if isinstance(data, list):
+                    # If it's a list of strings, return as is
+                    if all(isinstance(item, str) for item in data):
+                        return data
+                    # If it's a list of dicts, extract meaningful values
+                    elif all(isinstance(item, dict) for item in data):
+                        simple_list = []
+                        for item in data:
+                            # Try common keys in user/feature dictionaries
+                            if 'name' in item:
+                                simple_list.append(item['name'])
+                            elif 'role' in item:
+                                simple_list.append(item['role'])
+                            elif 'title' in item:
+                                simple_list.append(item['title'])
+                            elif 'description' in item:
+                                # Take first few words of description
+                                simple_list.append(item['description'].split()[:3].join(' '))
+                            else:
+                                # Fallback: use string representation
+                                simple_list.append(str(item))
+                        return simple_list
+                    else:
+                        # Mixed types, convert all to string
+                        return [str(item) for item in data]
+                else:
+                    # Not a list, wrap in list
+                    return [str(data)]
+            
+            safe_users = extract_simple_list(users_data)
+            safe_features = extract_simple_list(features_data)
+            
+            # Convert project to project_info format with safe data
             project_info = {
                 'title': project.title,
-                'objective': project.objective,
-                'users': project.users_data or [],
-                'features': project.features_data or [],
-                'scope': project.scope,
-                'flow': project.flow,
-                'additional_info': project.additional_info
+                'objective': project.objective or '',
+                'users': safe_users,
+                'features': safe_features,
+                'scope': project.scope or '',
+                'flow': project.flow or '',
+                'additional_info': project.additional_info or ''
             }
 
             # Analyze project

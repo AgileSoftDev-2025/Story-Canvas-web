@@ -156,6 +156,55 @@ class Project(models.Model):
     def scenarios_count(self):
         return self.scenarios.count()
 
+# ========== NEW MODELS ADDED HERE ==========
+
+class UserStoryGroup(models.Model):
+    ROLE_CHOICES = [
+        ('individual', 'Individual Users'),
+        ('advisors', 'Financial Advisors'),
+        ('managers', 'Investment Managers'),
+        ('admins', 'Administrators'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='user_story_groups')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    stories = models.JSONField()  # Store list of story texts
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'user_story_groups'
+        unique_together = ['project', 'role']
+        ordering = ['role']
+        indexes = [
+            models.Index(fields=['project', 'role']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_role_display()} - {self.project.title}"
+
+class UserStoryPage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.OneToOneField('Project', on_delete=models.CASCADE, related_name='user_story_page')
+    version = models.IntegerField(default=1)
+    is_accepted = models.BooleanField(default=False)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'user_story_pages'
+        indexes = [
+            models.Index(fields=['project', 'is_accepted']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"User Story Page - {self.project.title} (v{self.version})"
+
+# ========== CONTINUE WITH EXISTING MODELS ==========
+
 class UserStory(models.Model):
     PRIORITY_CHOICES = [
         ('low', 'Low'),

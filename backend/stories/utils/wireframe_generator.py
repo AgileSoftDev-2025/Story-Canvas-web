@@ -13,23 +13,27 @@ class WireframeGenerator:
     def generate_html_documentation(self, project_info, user_stories, rag_db=None):
         """
         RAG-enhanced HTML documentation generation - COMPREHENSIVE MVP HTML ONLY
-        EXACT SAME as Colab version
         """
         print("🌐 Generating RAG-enhanced MVP HTML documentation...")
 
-        # -------- PAGE INFERENCE (EXACT SAME AS COLAB) --------
+        # -------- PAGE INFERENCE --------
         def infer_pages(user_stories):
             pages = {}
+            print(f"DEBUG: Inferring pages from {len(user_stories)} stories")
+            
             for story in user_stories:
-                if isinstance(story, UserStory):
+                # Handle both dict and object formats safely
+                if hasattr(story, 'story_text'):  # It's a UserStory object
                     text = story.story_text.lower()
                     feature = (story.feature or "").strip()
                     role = (story.role or "general").strip()
-                else:
-                    # Handle dict format from Colab
-                    text = (story.get("text") or "").lower()
+                elif isinstance(story, dict):  # It's a dictionary
+                    text = (story.get("text") or story.get("story_text") or "").lower()
                     feature = (story.get("feature") or "").strip()
                     role = (story.get("role") or "general").strip()
+                else:
+                    print(f"DEBUG: Skipping unknown story type: {type(story)}")
+                    continue
 
                 page_keywords = {
                     "login": "login", "signin": "login", "authenticate": "login", "log in": "login",
@@ -57,144 +61,230 @@ class WireframeGenerator:
                     page_name = f"{role.lower().replace(' ', '-')}-page"
 
                 pages.setdefault(page_name, []).append(story)
+                print(f"DEBUG: Story assigned to page: {page_name}")
+            
+            print(f"DEBUG: Inferred {len(pages)} total pages")
             return pages
 
-        # -------- RAG-ENHANCED PAGE GENERATION (EXACT SAME AS COLAB) --------
+        # -------- RAG-ENHANCED PAGE GENERATION --------
         def generate_page_html_with_rag(project_info, page_name, stories, rag_db):
             """Generate COMPREHENSIVE MVP HTML using RAG patterns + LLM - PURE HTML ONLY"""
-
+            
+            print(f"DEBUG: Processing {len(stories)} stories for page: {page_name}")
+            
             # Get relevant UI patterns
             ui_patterns = []
             if rag_db:
+                print(f"DEBUG: Retrieving UI patterns for: {page_name}")
                 ui_patterns = rag_db.retrieve_ui_patterns(page_name, k=2)
+                print(f"DEBUG: Retrieved {len(ui_patterns)} UI patterns")
 
-            # Build pattern context (EXACT SAME AS COLAB)
+            # Build pattern context
             pattern_context = ""
             for i, pattern in enumerate(ui_patterns):
+                print(f"DEBUG: Processing UI pattern {i}")
                 metadata = pattern['metadata']
+                
+                # Handle required_elements - ensure it's a list of strings
+                required_elements = metadata.get('required_elements', [])
+                print(f"DEBUG: Required elements type: {type(required_elements)}, value: {required_elements}")
+                if required_elements and isinstance(required_elements, list):
+                    required_elements_str = ', '.join([str(elem) for elem in required_elements])
+                else:
+                    required_elements_str = 'None'
+                
+                # Handle optional_elements - ensure it's a list of strings  
+                optional_elements = metadata.get('optional_elements', [])
+                print(f"DEBUG: Optional elements type: {type(optional_elements)}, value: {optional_elements}")
+                if optional_elements and isinstance(optional_elements, list):
+                    optional_elements_str = ', '.join([str(elem) for elem in optional_elements])
+                else:
+                    optional_elements_str = 'None'
+                
                 pattern_context += f"""
-            UI PATTERN {i+1}: {metadata['page_type']}
-            - Layout: {metadata['layout']}
-            - Required Elements: {', '.join(metadata['required_elements'])}
-            - Optional Elements: {', '.join(metadata.get('optional_elements', []))}
-            - Best Practices: {metadata['best_practices']}
-            - Common Variations: {metadata.get('common_variations', 'N/A')}
-            """
+    UI PATTERN {i+1}: {metadata.get('page_type', 'Unknown')}
+    - Layout: {metadata.get('layout', 'Standard')}
+    - Required Elements: {required_elements_str}
+    - Optional Elements: {optional_elements_str}
+    - Best Practices: {metadata.get('best_practices', 'Standard practices')}
+    - Common Variations: {metadata.get('common_variations', 'N/A')}
+    """
 
-            # Get project patterns for additional context (EXACT SAME AS COLAB)
+            print(f"DEBUG: Pattern context built, length: {len(pattern_context)}")
+
+            # Get project patterns for additional context
             project_description = self.format_project_description(project_info)
+            print(f"DEBUG: Project description: {project_description[:100]}...")
+            
             project_patterns = []
             if rag_db:
+                print(f"DEBUG: Retrieving project patterns")
                 project_patterns = rag_db.retrieve_similar_patterns(project_description, k=2)
+                print(f"DEBUG: Retrieved {len(project_patterns)} project patterns")
 
             project_pattern_context = ""
             for i, pattern in enumerate(project_patterns):
-                metadata = pattern['metadata']
+                print(f"DEBUG: Processing project pattern {i}")
+                print(f"DEBUG: Project pattern type: {type(pattern)}, value: {pattern}")
+                
+                # SAFE ACCESS: Check if pattern is a dictionary and has metadata
+                if not isinstance(pattern, dict):
+                    print(f"DEBUG: Pattern {i} is not a dict, skipping")
+                    continue
+                    
+                metadata = pattern.get('metadata', {})
+                print(f"DEBUG: Metadata type: {type(metadata)}, keys: {metadata.keys() if isinstance(metadata, dict) else 'N/A'}")
+                
+                # Handle key_features - ensure it's a list of strings
+                key_features = metadata.get('key_features', [])
+                print(f"DEBUG: Key features type: {type(key_features)}, value: {key_features}")
+                if key_features and isinstance(key_features, list):
+                    key_features_str = ', '.join([str(feature) for feature in key_features])
+                else:
+                    key_features_str = 'Standard features'
+                
+                # Handle target_users - ensure it's a list of strings
+                target_users = metadata.get('target_users', [])
+                print(f"DEBUG: Target users type: {type(target_users)}, value: {target_users}")
+                if target_users and isinstance(target_users, list):
+                    target_users_str = ', '.join([str(user) for user in target_users])
+                else:
+                    target_users_str = 'General users'
+                
                 project_pattern_context += f"""
-            PROJECT PATTERN {i+1}: {metadata['project_type']}
-            - Description: {metadata['description']}
-            - Key Features: {metadata['key_features']}
-            - Target Users: {metadata['target_users']}
-            """
+    PROJECT PATTERN {i+1}: {metadata.get('project_type', 'General')}
+    - Description: {metadata.get('description', 'No description')}
+    - Key Features: {key_features_str}
+    - Target Users: {target_users_str}
+    """
 
-            # Extract user stories for this page (EXACT SAME AS COLAB)
-            page_stories_text = "\n".join([
-                f"- {story.story_text if isinstance(story, UserStory) else story.get('text', '')} "
-                f"(Feature: {story.feature if isinstance(story, UserStory) else story.get('feature', 'General')})"
-                for story in stories[:10]
-            ])
+            print(f"DEBUG: Project pattern context built, length: {len(project_pattern_context)}")
 
-            # EXACT SAME PROMPT AS COLAB
+            # Stories processing
+            print("DEBUG: Starting stories processing...")
+            
+            # Check what's in stories before processing
+            print(f"DEBUG: Stories type: {type(stories)}")
+            for i, story in enumerate(stories[:3]):  # Check first 3
+                print(f"DEBUG: Story {i} type: {type(story)}")
+                print(f"DEBUG: Story {i} content: {story}")
+
+            # Extract user stories for this page - handle both formats safely
+            story_lines = []
+            for story in stories[:10]:
+                try:
+                    if hasattr(story, 'story_text'):  # UserStory object
+                        story_text = story.story_text
+                        feature = story.feature or "General"
+                    elif isinstance(story, dict):  # Dictionary
+                        story_text = story.get('text', '') or story.get('story_text', '')
+                        feature = story.get('feature', 'General')
+                    else:
+                        story_text = str(story)
+                        feature = "General"
+                    
+                    story_lines.append(f"- {story_text} (Feature: {feature})")
+                except Exception as e:
+                    print(f"DEBUG: Error processing story: {e}")
+                    continue
+
+            page_stories_text = "\n".join(story_lines)
+            print(f"DEBUG: Page stories text length: {len(page_stories_text)}")
+
+            print("DEBUG: About to build final prompt...")
+            
+            # Build the prompt
             prompt = f"""
-PROJECT: {project_info.get('title', 'Untitled Project')}
-DOMAIN: {self.detect_domain(self.format_project_description(project_info))}
-PAGE: {page_name}
+    PROJECT: {project_info.get('title', 'Untitled Project')}
+    DOMAIN: {self.detect_domain(self.format_project_description(project_info))}
+    PAGE: {page_name}
 
-USER STORIES FOR THIS PAGE:
-{page_stories_text}
+    USER STORIES FOR THIS PAGE:
+    {page_stories_text}
 
-RELEVANT UI PATTERNS:
-{pattern_context}
+    RELEVANT UI PATTERNS:
+    {pattern_context}
 
-PROJECT CONTEXT:
-{project_pattern_context}
+    PROJECT CONTEXT:
+    {project_pattern_context}
 
-TASK: Create a COMPREHENSIVE, MVP-READY HTML5 page for "{page_name}" that includes ALL essential UI components.
+    TASK: Create a COMPREHENSIVE, MVP-READY HTML5 page for "{page_name}" that includes ALL essential UI components.
 
-CRITICAL REQUIREMENTS:
-- RETURN ONLY PURE HTML TAGS, NO CSS, NO JAVASCRIPT, NO EXTERNAL DEPENDENCIES
-- NO NAVIGATION MENUS, NO HEADERS WITH LINKS, NO FOOTERS WITH LINKS
-- Create a FOCUSED interface with only the core functionality for this specific page
-- Use semantic HTML5 elements: main, section, article, form, table
-- Include COMPREHENSIVE form elements with proper attributes
-- Add INTERACTIVE components that work with pure HTML
-- Structure content with proper heading hierarchy (h1-h6)
-- Make it USABLE and PRACTICAL for real users
+    CRITICAL REQUIREMENTS:
+    - RETURN ONLY PURE HTML TAGS, NO CSS, NO JAVASCRIPT, NO EXTERNAL DEPENDENCIES
+    - NO NAVIGATION MENUS, NO HEADERS WITH LINKS, NO FOOTERS WITH LINKS
+    - Create a FOCUSED interface with only the core functionality for this specific page
+    - Use semantic HTML5 elements: main, section, article, form, table
+    - Include COMPREHENSIVE form elements with proper attributes
+    - Add INTERACTIVE components that work with pure HTML
+    - Structure content with proper heading hierarchy (h1-h6)
+    - Make it USABLE and PRACTICAL for real users
 
-MANDATORY UI COMPONENTS TO INCLUDE:
+    MANDATORY UI COMPONENTS TO INCLUDE:
 
-1. COMPREHENSIVE FORM ELEMENTS:
-   - Text inputs with different types (text, email, password, number, tel, url)
-   - Textareas with placeholder text
-   - Select dropdowns with multiple options
-   - Radio button groups
-   - Checkbox groups
-   - File upload inputs
-   - Date and time pickers
-   - Range sliders
-   - Search inputs
-   - Submit and reset buttons
-   - Fieldset and legend for grouping
-   - Required field indicators
+    1. COMPREHENSIVE FORM ELEMENTS:
+    - Text inputs with different types (text, email, password, number, tel, url)
+    - Textareas with placeholder text
+    - Select dropdowns with multiple options
+    - Radio button groups
+    - Checkbox groups
+    - File upload inputs
+    - Date and time pickers
+    - Range sliders
+    - Search inputs
+    - Submit and reset buttons
+    - Fieldset and legend for grouping
+    - Required field indicators
 
-2. DATA DISPLAY COMPONENTS:
-   - Tables with headers, body, and footer
-   - Card layouts with images and text
-   - Lists (ordered, unordered) for content
-   - Definition lists for key-value pairs
-   - Progress bars
-   - Meter elements
+    2. DATA DISPLAY COMPONENTS:
+    - Tables with headers, body, and footer
+    - Card layouts with images and text
+    - Lists (ordered, unordered) for content
+    - Definition lists for key-value pairs
+    - Progress bars
+    - Meter elements
 
-3. INTERACTIVE ELEMENTS:
-   - Multiple button types (submit, button, reset)
-   - Button groups
-   - Links with different states
-   - Details/summary expandable sections
-   - Dialog/modal structures (using details)
-   - Tab-like interfaces (using radio buttons and labels)
+    3. INTERACTIVE ELEMENTS:
+    - Multiple button types (submit, button, reset)
+    - Button groups
+    - Links with different states
+    - Details/summary expandable sections
+    - Dialog/modal structures (using details)
+    - Tab-like interfaces (using radio buttons and labels)
 
-4. CONTENT SECTIONS:
-   - Main content area with clear purpose
-   - Feature sections with relevant components
-   - User input forms specific to the page
-   - Data display areas
-   - Action buttons and controls
+    4. CONTENT SECTIONS:
+    - Main content area with clear purpose
+    - Feature sections with relevant components
+    - User input forms specific to the page
+    - Data display areas
+    - Action buttons and controls
 
-5. SPECIFIC PAGE COMPONENTS:
-   - Login: Full authentication form only
-   - Dashboard: Stats cards, recent activity, quick actions only
-   - Product Listing: Product cards, filters, sort options only
-   - Profile: User info form, avatar upload only
-   - Checkout: Order summary, payment form only
+    5. SPECIFIC PAGE COMPONENTS:
+    - Login: Full authentication form only
+    - Dashboard: Stats cards, recent activity, quick actions only
+    - Product Listing: Product cards, filters, sort options only
+    - Profile: User info form, avatar upload only
+    - Checkout: Order summary, payment form only
 
-HTML STRUCTURE GUIDELINES:
-- Use proper form validation attributes (required, pattern, min, max, etc.)
-- Include accessible labels for all form elements
-- Use ARIA attributes where appropriate
-- Add placeholder text and sample content
-- Create realistic data in tables and lists
-- Ensure logical tab order
-- Include error message containers
-- Add success confirmation sections
-- NO NAVIGATION BARS, NO MENUS, NO SITE-WIDE HEADERS/FOOTERS
+    HTML STRUCTURE GUIDELINES:
+    - Use proper form validation attributes (required, pattern, min, max, etc.)
+    - Include accessible labels for all form elements
+    - Use ARIA attributes where appropriate
+    - Add placeholder text and sample content
+    - Create realistic data in tables and lists
+    - Ensure logical tab order
+    - Include error message containers
+    - Add success confirmation sections
+    - NO NAVIGATION BARS, NO MENUS, NO SITE-WIDE HEADERS/FOOTERS
 
-IMPORTANT: This should be a FOCUSED, SINGLE-PURPOSE HTML page that provides only the core functionality.
-DO NOT include any navigation to other pages or global site elements.
+    IMPORTANT: This should be a FOCUSED, SINGLE-PURPOSE HTML page that provides only the core functionality.
+    DO NOT include any navigation to other pages or global site elements.
 
-FORMAT: Return ONLY the HTML code, no explanations, no markdown, no code blocks.
-The output must be valid, complete HTML that can be rendered directly in a browser.
-"""
+    FORMAT: Return ONLY the HTML code, no explanations, no markdown, no code blocks.
+    The output must be valid, complete HTML that can be rendered directly in a browser.
+    """
 
+            print("DEBUG: About to call LLM API")
             try:
                 html_output = self._call_llm_api(prompt, temperature=0.2, max_tokens=6000)
                 return self._extract_html_from_response(html_output)
@@ -202,53 +292,109 @@ The output must be valid, complete HTML that can be rendered directly in a brows
                 print(f"⚠️ RAG HTML generation failed for {page_name}, using fallback: {e}")
                 return self.generate_page_html_fallback(project_info, page_name, stories)
 
-        def generate_page_html_fallback(project_info, page_name, stories):
-            """Comprehensive fallback HTML generation with MVP components - NO NAVIGATION"""
-            # Group stories by feature
-            stories_by_feature = {}
-            for story in stories:
-                if isinstance(story, UserStory):
-                    feature = story.feature or "General"
-                else:
-                    feature = story.get("feature", "General")
-                stories_by_feature.setdefault(feature, []).append(story)
+        # -------- RUN PIPELINE --------
+        print(f"DEBUG: Starting pipeline with {len(user_stories)} user stories")
+        
+        pages_map = infer_pages(user_stories)
+        
+        # DEBUG: Check what pages were inferred
+        print(f"DEBUG: Inferred {len(pages_map)} pages: {list(pages_map.keys())}")
+        for page_name, stories in pages_map.items():
+            print(f"DEBUG: Page '{page_name}' has {len(stories)} stories")
+        
+        # FIX: If no pages were inferred, create a default page
+        if not pages_map:
+            print("DEBUG: No pages inferred, creating default page")
+            pages_map = {"default": user_stories}
 
-            # Generate feature sections
-            features_html = ""
-            for feature, feature_stories in stories_by_feature.items():
-                stories_list = "".join([
-                    f"<li>{story.story_text if isinstance(story, UserStory) else story.get('text', 'User story')}</li>" 
-                    for story in feature_stories
-                ])
-                features_html += f"""
-            <section class="feature-section">
-                <h3>{feature}</h3>
-                <ul class="stories-list">
-                    {stories_list}
-                </ul>
-            </section>
-            """
+        generated_pages = {}
 
-            # Generate interactive components based on page type
-            interactive_components = self.generate_interactive_components(page_name, project_info)
+        # Generate each page with RAG patterns
+        for page_name, stories in pages_map.items():
+            print(f"   📄 Generating {page_name} with focused MVP components...")
+            try:
+                html = generate_page_html_with_rag(project_info, page_name, stories, rag_db)
+                generated_pages[page_name] = html
+            except Exception as e:
+                print(f"⚠️ Error generating page {page_name}: {e}")
+                # Create a simple fallback HTML
+                generated_pages[page_name] = f"""
+    <!DOCTYPE html>
+    <html>
+    <head><title>{page_name}</title></head>
+    <body>
+        <h1>{page_name}</h1>
+        <p>Error generating content for this page.</p>
+    </body>
+    </html>
+    """
 
-            return f"""
+        result = {
+            "role_pages": generated_pages,
+            "generated_date": timezone.now().isoformat(),
+            "used_rag_patterns": rag_db is not None
+        }
+        
+        print(f"DEBUG: Final result has {len(generated_pages)} pages")
+        return result
+
+    def generate_page_html_fallback(self, project_info, page_name, stories):
+        """Comprehensive fallback HTML generation when LLM fails"""
+        # Group stories by feature
+        stories_by_feature = {}
+        for story in stories:
+            if hasattr(story, 'feature'):  # UserStory object
+                feature = story.feature or "General"
+            elif isinstance(story, dict):  # Dictionary
+                feature = story.get('feature', 'General')
+            else:
+                feature = "General"
+            stories_by_feature.setdefault(feature, []).append(story)
+
+        # Generate feature sections
+        features_html = ""
+        for feature, feature_stories in stories_by_feature.items():
+            stories_list = "".join([
+                f"<li>{getattr(story, 'story_text', story.get('text', 'User story'))}</li>" 
+                for story in feature_stories
+            ])
+            features_html += f"""
+        <section class="feature-section">
+            <h3>{feature}</h3>
+            <ul class="stories-list">
+                {stories_list}
+            </ul>
+        </section>
+        """
+
+        return f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{page_name.title()} - {project_info.get('title', 'Project')}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+        .page-header {{ background: #f5f5f5; padding: 20px; border-radius: 5px; }}
+        .cards-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }}
+        .card {{ border: 1px solid #ddd; padding: 15px; border-radius: 5px; }}
+        .feature-section {{ margin: 20px 0; padding: 15px; border-left: 4px solid #007bff; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #f2f2f2; }}
+        .status-active {{ color: green; }}
+        .status-pending {{ color: orange; }}
+        details {{ margin: 10px 0; }}
+    </style>
 </head>
 <body>
     <main>
-        <!-- Page Header -->
         <header class="page-header">
             <h1>{page_name.replace('-', ' ').title()}</h1>
             <p>Focused interface for {project_info.get('title', 'project')}</p>
         </header>
 
-        <!-- Project Overview Cards -->
         <section class="overview-cards">
             <h2>Project Context</h2>
             <div class="cards-grid">
@@ -263,19 +409,11 @@ The output must be valid, complete HTML that can be rendered directly in a brows
             </div>
         </section>
 
-        <!-- User Stories Section -->
         <section class="user-stories">
             <h2>User Stories</h2>
             {features_html}
         </section>
 
-        <!-- Interactive Components Section -->
-        <section class="interactive-components">
-            <h2>Core Functionality</h2>
-            {interactive_components}
-        </section>
-
-        <!-- Data Tables Section -->
         <section class="data-section">
             <h2>Data Management</h2>
             <table>
@@ -314,7 +452,6 @@ The output must be valid, complete HTML that can be rendered directly in a brows
             </table>
         </section>
 
-        <!-- FAQ Section -->
         <section class="faq-section">
             <h2>Frequently Asked Questions</h2>
             <details>
@@ -330,22 +467,6 @@ The output must be valid, complete HTML that can be rendered directly in a brows
 </body>
 </html>
 """
-
-        # -------- RUN PIPELINE (EXACT SAME AS COLAB) --------
-        pages_map = infer_pages(user_stories)
-        generated_pages = {}
-
-        # Generate each page with RAG patterns
-        for page_name, stories in pages_map.items():
-            print(f"   📄 Generating {page_name} with focused MVP components...")
-            html = generate_page_html_with_rag(project_info, page_name, stories, rag_db)
-            generated_pages[page_name] = html
-
-        return {
-            "role_pages": generated_pages,
-            "generated_date": timezone.now().isoformat(),
-            "used_rag_patterns": rag_db is not None
-        }
 
     def generate_interactive_components(self, page_name, project_info):
         """Generate page-specific interactive components - NO NAVIGATION (EXACT SAME AS COLAB)"""
@@ -549,30 +670,45 @@ The output must be valid, complete HTML that can be rendered directly in a brows
             """
 
     def format_project_description(self, project_info):
-        """Format project description (EXACT SAME AS COLAB)"""
-        if isinstance(project_info, Project):
-            # Handle Django model
+        """Format project description safely"""
+        try:
+            if isinstance(project_info, dict):
+                # Handle dict format
+                title = project_info.get('title', 'Untitled Project')
+                objective = project_info.get('objective', 'Not specified')
+                users = project_info.get('users', [])
+                features = project_info.get('features', [])
+                scope = project_info.get('scope', 'Not specified')
+                flow = project_info.get('flow', 'Not specified')
+                additional_info = project_info.get('additional_info', 'None')
+            else:
+                # Handle Django model
+                title = getattr(project_info, 'title', 'Untitled Project')
+                objective = getattr(project_info, 'objective', 'Not specified') or 'Not specified'
+                users = getattr(project_info, 'users_data', []) or []
+                features = getattr(project_info, 'features_data', []) or []
+                scope = getattr(project_info, 'scope', 'Not specified') or 'Not specified'
+                flow = getattr(project_info, 'flow', 'Not specified') or 'Not specified'
+                additional_info = getattr(project_info, 'additional_info', 'None') or 'None'
+
+            # ✅ FIX: Ensure users and features are lists of strings
+            users_str = ', '.join([str(user) for user in users]) if users and isinstance(users, (list, tuple)) else 'Not specified'
+            features_str = ', '.join([str(feature) for feature in features]) if features and isinstance(features, (list, tuple)) else 'Not specified'
+
             description = f"""
-            Title: {project_info.title}
-            Objective: {project_info.objective or 'Not specified'}
-            Users: {', '.join(project_info.users_data or [])}
-            Features: {', '.join(project_info.features_data or [])}
-            Scope: {project_info.scope or 'Not specified'}
-            Flow: {project_info.flow or 'Not specified'}
-            Additional Information: {project_info.additional_info or 'None'}
-            """
-        else:
-            # Handle dict format from Colab
-            description = f"""
-            Title: {project_info.get('title', 'Untitled Project')}
-            Objective: {project_info.get('objective', 'Not specified')}
-            Users: {', '.join(project_info.get('users', []))}
-            Features: {', '.join(project_info.get('features', []))}
-            Scope: {project_info.get('scope', 'Not specified')}
-            Flow: {project_info.get('flow', 'Not specified')}
-            Additional Information: {project_info.get('additional_info', 'None')}
-            """
-        return description
+    Title: {title}
+    Objective: {objective}
+    Users: {users_str}
+    Features: {features_str}
+    Scope: {scope}
+    Flow: {flow}
+    Additional Information: {additional_info}
+    """
+            return description
+            
+        except Exception as e:
+            print(f"DEBUG: Error in format_project_description: {e}")
+            return "Project information not available"
 
     def detect_domain(self, description):
         """Detect domain from description (EXACT SAME AS COLAB)"""
@@ -597,8 +733,6 @@ The output must be valid, complete HTML that can be rendered directly in a brows
         """Call LLM API using Django settings"""
         try:
             api_token = os.getenv('REPLICATE_API_TOKEN')
-            if not api_token or api_token == 'your_replicate_api_token_here':
-                raise Exception("Replicate API token not configured")
             
             client = replicate.Client(api_token=api_token)
             

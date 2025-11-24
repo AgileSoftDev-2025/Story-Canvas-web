@@ -1,4 +1,22 @@
 {
-    "python-envs.defaultEnvManager": "ms-python.python:system",
-    "python-envs.pythonProjects": []
+  // Python Configuration
+  "python.defaultInterpreterPath": "C:\\Python313\\python.exe",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.typeCheckingMode": "off", // UBAH INI KE "off"
+  "python.analysis.extraPaths": ["./backend"],
+
+  // Django Configuration
+  "python.analysis.djangoSettings": "StoryCanvas.settings",
+
+  // Spell Checker
+  "cSpell.words": ["wireframes", "storycanvas", "userstory"],
+
+  // Editor
+  "editor.formatOnSave": true,
+
+  // Terminal Configuration - PERBAIKI TYPO
+  "terminal.integrated.defaultProfile.windows": "Command Prompt",
+  "terminal.integrated.env.windows": {
+    "PYTHONPATH": "${workspaceFolder}/backend" // BENARKAN "PYTHONPATH"
+  }
 }
