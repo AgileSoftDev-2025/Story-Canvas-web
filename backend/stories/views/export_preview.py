@@ -32,16 +32,50 @@ def preview_export_by_id(request, export_id):
         }, status=500)
 
 
+# Setup logger
+logger = logging.getLogger(__name__)
+
 @api_view(['GET'])
 def preview_project_export(request, project_id):
+    """
+    Preview project export data dengan debugging yang komprehensif
+    """
+    logger.info(f"🔍 [PREVIEW] Starting preview for project_id: {project_id}")
+    logger.info(f"📋 [PREVIEW] Request method: {request.method}")
+    logger.info(f"🔧 [PREVIEW] Request GET params: {dict(request.GET)}")
+    logger.info(f"👤 [PREVIEW] User: {request.user} (authenticated: {request.user.is_authenticated})")
+    
     try:
-        project = get_object_or_404(Project, project_id=project_id)
+        # Debug: Cek apakah project_id valid
+        logger.info(f"🔎 [PREVIEW] Looking for project with ID: {project_id}")
         
-        include_stories = request.GET.get('include_stories', 'true').lower() == 'true'
-        include_wireframes = request.GET.get('include_wireframes', 'true').lower() == 'true'
-        include_scenarios = request.GET.get('include_scenarios', 'true').lower() == 'true'
-        export_format = request.GET.get('format', 'html')
-        
+        # Gunakan get_object_or_404 dengan exception handling yang lebih baik
+        try:
+            project = get_object_or_404(Project, project_id=project_id)
+            logger.info(f"✅ [PREVIEW] Project found: {project.title} (ID: {project.project_id})")
+        except Exception as e:
+            logger.error(f"❌ [PREVIEW] Project not found or error: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Project not found: {str(e)}'
+            }, status=404)
+
+        # Parse parameters dengan error handling
+        try:
+            include_stories = request.GET.get('include_stories', 'true').lower() == 'true'
+            include_wireframes = request.GET.get('include_wireframes', 'true').lower() == 'true'
+            include_scenarios = request.GET.get('include_scenarios', 'true').lower() == 'true'
+            export_format = request.GET.get('format', 'html')
+            
+            logger.info(f"⚙️ [PREVIEW] Config - stories: {include_stories}, wireframes: {include_wireframes}, scenarios: {include_scenarios}, format: {export_format}")
+        except Exception as e:
+            logger.error(f"❌ [PREVIEW] Error parsing parameters: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid parameters: {str(e)}'
+            }, status=400)
+
+        # Build preview data
         preview_data = {
             'project_id': project.project_id,
             'title': project.title,
@@ -55,27 +89,87 @@ def preview_project_export(request, project_id):
             }
         }
         
-        preview_data['user_stories'] = project.user_stories.all() if include_stories else []
-        preview_data['wireframes'] = project.wireframes.all() if include_wireframes else []
-        preview_data['scenarios'] = project.scenarios.all() if include_scenarios else []
-        
-        serializer = ProjectExportPreviewSerializer(preview_data)
-        
-        return JsonResponse({
+        logger.info(f"📊 [PREVIEW] Base preview data created")
+
+        # Load data dengan error handling
+        try:
+            if include_stories:
+                user_stories = project.user_stories.all()
+                preview_data['user_stories'] = user_stories
+                logger.info(f"📖 [PREVIEW] Loaded {user_stories.count()} user stories")
+            else:
+                preview_data['user_stories'] = []
+                logger.info("📖 [PREVIEW] User stories excluded")
+                
+            if include_wireframes:
+                wireframes = project.wireframes.all()
+                preview_data['wireframes'] = wireframes
+                logger.info(f"🎨 [PREVIEW] Loaded {wireframes.count()} wireframes")
+            else:
+                preview_data['wireframes'] = []
+                logger.info("🎨 [PREVIEW] Wireframes excluded")
+                
+            if include_scenarios:
+                scenarios = project.scenarios.all()
+                preview_data['scenarios'] = scenarios
+                logger.info(f"🧪 [PREVIEW] Loaded {scenarios.count()} scenarios")
+            else:
+                preview_data['scenarios'] = []
+                logger.info("🧪 [PREVIEW] Scenarios excluded")
+                
+        except Exception as e:
+            logger.error(f"❌ [PREVIEW] Error loading project data: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Error loading project data: {str(e)}'
+            }, status=500)
+
+        # Serialize data
+        try:
+            logger.info("🔄 [PREVIEW] Starting serialization...")
+            serializer = ProjectExportPreviewSerializer(preview_data)
+            serialized_data = serializer.data
+            logger.info("✅ [PREVIEW] Serialization successful")
+            
+            # Log summary of serialized data
+            logger.info(f"📈 [PREVIEW] Serialized data summary:")
+            logger.info(f"   - Project: {serialized_data.get('title', 'No title')}")
+            logger.info(f"   - Stories: {len(serialized_data.get('user_stories', []))}")
+            logger.info(f"   - Wireframes: {len(serialized_data.get('wireframes', []))}")
+            logger.info(f"   - Scenarios: {len(serialized_data.get('scenarios', []))}")
+            
+        except Exception as e:
+            logger.error(f"❌ [PREVIEW] Serialization error: {str(e)}")
+            logger.error(f"🔧 [PREVIEW] Preview data that caused error: {preview_data}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Serialization error: {str(e)}'
+            }, status=500)
+
+        # Return successful response
+        response_data = {
             'success': True,
-            'data': serializer.data,
+            'data': serialized_data,
             'config': {
                 'include_stories': include_stories,
                 'include_wireframes': include_wireframes,
                 'include_scenarios': include_scenarios,
                 'format': export_format
             }
-        })
+        }
+        
+        logger.info(f"🎉 [PREVIEW] Preview completed successfully for project: {project.title}")
+        return JsonResponse(response_data)
         
     except Exception as e:
+        logger.error(f"💥 [PREVIEW] Unhandled exception: {str(e)}")
+        logger.error(f"🔧 [PREVIEW] Exception type: {type(e).__name__}")
+        logger.error(f"📝 [PREVIEW] Exception details:", exc_info=True)
+        
         return JsonResponse({
             'success': False,
-            'error': f'Failed to preview project export: {str(e)}'
+            'error': f'Internal server error: {str(e)}',
+            'debug_info': f'Exception type: {type(e).__name__}'
         }, status=500)
 
 
@@ -183,25 +277,26 @@ def export_project_data(request, project_id):
             
             if include_stories:
                 stories_content = generate_stories_content(project)
-                zip_file.writestr('user_stories.md', stories_content)
+                zip_file.writestr('user_stories.txt', stories_content)
             
             if include_wireframes:
                 wireframes_content = generate_wireframes_content(project)
-                zip_file.writestr('wireframes.md', wireframes_content)
+                zip_file.writestr('wireframes.txt', wireframes_content)
             
             if include_scenarios:
                 scenarios_content = generate_scenarios_content(project)
                 zip_file.writestr('test_scenarios.feature', scenarios_content)
             
             readme_content = generate_readme_content(project, config)
-            zip_file.writestr('README.md', readme_content)
+            zip_file.writestr('README.txt', readme_content)
         
         zip_buffer.seek(0)
         response = HttpResponse(zip_buffer, content_type='application/zip')
         response['Content-Disposition'] = f'attachment; filename="{project.title.replace(" ", "_")}_export.zip"'
         
+        # Create export record
         Export.objects.create(
-            user=None,
+            user=request.user if request.user.is_authenticated else None,
             project=project,
             export_type='ZIP',
             file_name=f"{project.title.replace(' ', '_')}_export.zip",
@@ -220,11 +315,21 @@ def export_project_data(request, project_id):
 @api_view(['GET'])
 def list_user_exports(request):
     try:
-        return JsonResponse({
-            'success': True,
-            'data': [],
-            'count': 0
-        })
+        if request.user.is_authenticated:
+            exports = Export.objects.filter(user=request.user).order_by('-created_at')
+            serializer = ExportPreviewSerializer(exports, many=True)
+            
+            return JsonResponse({
+                'success': True,
+                'data': serializer.data,
+                'count': exports.count()
+            })
+        else:
+            return JsonResponse({
+                'success': True,
+                'data': [],
+                'count': 0
+            })
         
     except Exception as e:
         return JsonResponse({
@@ -255,8 +360,10 @@ def calculate_estimated_size(data, export_format):
 def generate_stories_content(project):
     stories = project.user_stories.all()
     
-    content = f"# User Stories - {project.title}\n\n"
-    content += f"**Domain:** {project.domain}\n\n"
+    content = f"USER STORIES - {project.title}\n\n"
+    content += f"Domain: {project.domain}\n\n"
+    content += f"Objective: {project.objective}\n\n"
+    content += "=" * 50 + "\n\n"
     
     roles = {}
     for story in stories:
@@ -266,16 +373,18 @@ def generate_stories_content(project):
         roles[role].append(story)
     
     for role, role_stories in roles.items():
-        content += f"## {role}\n\n"
+        content += f"ROLE: {role}\n"
+        content += "-" * 30 + "\n\n"
         for story in role_stories:
-            content += f"- **As a {story.role}**, {story.action} **so that** {story.benefit}\n"
+            content += f"As a {story.role}, {story.action} so that {story.benefit}\n\n"
             if story.acceptance_criteria:
-                content += f"  - Acceptance Criteria: {story.acceptance_criteria}\n"
+                content += f"Acceptance Criteria: {story.acceptance_criteria}\n"
             if story.priority:
-                content += f"  - Priority: {story.priority}\n"
+                content += f"Priority: {story.priority}\n"
             if story.status:
-                content += f"  - Status: {story.status}\n"
-            content += "\n"
+                content += f"Status: {story.status}\n"
+            content += "\n" + "-" * 20 + "\n\n"
+        content += "=" * 50 + "\n\n"
     
     return content
 
@@ -283,16 +392,18 @@ def generate_stories_content(project):
 def generate_wireframes_content(project):
     wireframes = project.wireframes.all()
     
-    content = f"# Wireframes - {project.title}\n\n"
+    content = f"WIREFRAMES - {project.title}\n\n"
     content += f"Total Wireframes: {wireframes.count()}\n\n"
+    content += "=" * 50 + "\n\n"
     
     for wireframe in wireframes:
-        content += f"## {wireframe.title or 'Untitled Wireframe'}\n\n"
-        content += f"- **Page Type:** {wireframe.page_type or 'N/A'}\n"
-        content += f"- **Description:** {wireframe.description or 'No description'}\n"
+        content += f"WIREFRAME: {wireframe.title or 'Untitled Wireframe'}\n"
+        content += "-" * 30 + "\n\n"
+        content += f"Page Type: {wireframe.page_type or 'N/A'}\n"
+        content += f"Description: {wireframe.description or 'No description'}\n"
         if wireframe.creole_content:
-            content += f"- **Creole Content:**\n```\n{wireframe.creole_content}\n```\n"
-        content += "\n"
+            content += f"Content:\n{wireframe.creole_content}\n"
+        content += "\n" + "=" * 50 + "\n\n"
     
     return content
 
@@ -328,24 +439,24 @@ def generate_scenarios_content(project):
 
 
 def generate_readme_content(project, config):
-    content = f"# {project.title} - Export Package\n\n"
+    content = f"{project.title} - EXPORT PACKAGE\n\n"
     content += "This package contains exported project artifacts from Story Canvas.\n\n"
     
-    content += "## Contents\n\n"
+    content += "CONTENTS:\n\n"
     if config.get('include_stories', True):
-        content += "- `user_stories.md`: All user stories in Markdown format\n"
+        content += "- user_stories.txt: All user stories in text format\n"
     if config.get('include_wireframes', True):
-        content += "- `wireframes.md`: Wireframe descriptions and details\n"
+        content += "- wireframes.txt: Wireframe descriptions and details\n"
     if config.get('include_scenarios', True):
-        content += "- `test_scenarios.feature`: Test scenarios in Gherkin format\n"
+        content += "- test_scenarios.feature: Test scenarios in Gherkin format\n"
+    content += "- project_info.json: Project metadata\n"
+    content += "- README.txt: This file\n\n"
     
-    content += "- `project_info.json`: Project metadata\n\n"
-    
-    content += "## Project Information\n\n"
-    content += f"- **Title:** {project.title}\n"
-    content += f"- **Domain:** {project.domain}\n"
-    content += f"- **Objective:** {project.objective}\n"
-    content += f"- **Export Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    content += "PROJECT INFORMATION:\n\n"
+    content += f"- Title: {project.title}\n"
+    content += f"- Domain: {project.domain}\n"
+    content += f"- Objective: {project.objective}\n"
+    content += f"- Export Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
     
     content += "---\n*Generated by Story Canvas*"
     

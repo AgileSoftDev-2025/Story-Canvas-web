@@ -31,52 +31,13 @@ from stories.generation_views import (
 )
 
 urlpatterns = [
-    #auth endpoints
+    # Auth endpoints
     path('api/auth/debug-signin/', debug_signin, name='debug_signin'),
     path('api/auth/signup/', signup, name='signup'),
     path('api/auth/signin/', signin, name='signin'),
     path('api/auth/user/', current_user, name='current_user'),
     path('api/auth/signout/', signout, name='signout'),
     path('api/auth/refresh/', refresh_token, name='refresh_token'),
-
-    # User Stories endpoints
-    path('api/user-stories/', get_user_stories, name='get_user_stories'),
-    path('api/user-stories/create/', create_user_story, name='create_user_story'),
-    path('api/user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
-    path('api/user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
-    path('api/user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
-    path('api/user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
-    path('api/user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
-    # User Stories endpoints
-    path('user-stories/', get_user_stories, name='get_user_stories'),
-    path('user-stories/create/', create_user_story, name='create_user_story'),
-    path('user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
-    path('user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
-    path('user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
-    path('user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
-    path('user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
-
-    # ========== COMMENT/HAPUS USER STORY PAGE ENDPOINTS (SEMENTARA) ==========
-    # path('projects/<str:project_id>/user-story-page/', get_user_story_page, name='get_user_story_page'),
-    # path('projects/<str:project_id>/user-story-page/create/', create_user_story_page, name='create_user_story_page'),
-    # path('projects/<str:project_id>/user-story-page/update/', update_user_story_page, name='update_user_story_page'),
-    # path('projects/<str:project_id>/user-story-page/accept/', accept_user_story_page, name='accept_user_story_page'),
-    # path('projects/<str:project_id>/user-story-page/status/', get_user_story_page_status, name='get_user_story_page_status'),
-
-    # ========== PROJECT-SPECIFIC USER STORIES ==========
-    path('projects/<str:project_id>/user-stories/', get_project_user_stories, name='get_project_user_stories'),
-    path('api/user-stories/', get_user_stories, name='get_user_stories'),
-    path('api/user-stories/create/', create_user_story, name='create_user_story'),
-    path('api/user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
-    path('api/user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
-    path('api/user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
-    path('api/user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
-    path('api/user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
-    
-    # User Story Scenario endpoints
-    path('api/user-stories/<str:story_id>/scenarios/', get_story_scenarios, name='get_story_scenarios'),
-    
-    # Authentication endpoints
 
     # Health check endpoint
     path('api/health/', health_check, name='health_check'),
@@ -89,8 +50,22 @@ urlpatterns = [
     path('api/projects/<str:project_id>/delete/', delete_project, name='delete_project'),
     path('api/projects/<str:project_id>/stats/', get_project_stats, name='get_project_stats'),
 
+    # Export endpoints - UPDATED: Fixed export URLs
+    path('api/projects/<str:project_id>/export-preview/', preview_export_by_id, name='preview_export_by_id'),
+    path('api/projects/<str:project_id>/export/', preview_project_export, name='preview_project_export'),
+    path('api/projects/<str:project_id>/generate-export-preview/', generate_export_preview, name='generate_export_preview'),
+    path('api/exports/', list_user_exports, name='list_user_exports'),
 
-      # Project wireframes
+    # User Stories endpoints
+    path('api/user-stories/', get_user_stories, name='get_user_stories'),
+    path('api/user-stories/create/', create_user_story, name='create_user_story'),
+    path('api/user-stories/<str:story_id>/', get_user_story_detail, name='get_user_story_detail'),
+    path('api/user-stories/<str:story_id>/update/', update_user_story, name='update_user_story'),
+    path('api/user-stories/<str:story_id>/delete/', delete_user_story, name='delete_user_story'),
+    path('api/user-stories/status/<str:status>/', get_user_stories_by_status, name='get_user_stories_by_status'),
+    path('api/user-stories/priority/<str:priority>/', get_user_stories_by_priority, name='get_user_stories_by_priority'),
+
+    # Project wireframes
     path('api/projects/<str:project_id>/wireframes/', list_wireframes, name='list_wireframes'),
     path('api/projects/<str:project_id>/wireframes/create/', create_wireframe, name='create_wireframe'),
     
@@ -109,6 +84,7 @@ urlpatterns = [
     path('api/scenarios/create/project/<str:project_id>/', create_scenario, name='create_scenario_for_project'),
     path('api/scenarios/<str:scenario_id>/update/', update_scenario, name='update_scenario'),
     path('api/scenarios/<str:scenario_id>/delete/', delete_scenario, name='delete_scenario'),
+    
     # User Story Scenario endpoints
     path('api/user-stories/<str:story_id>/scenarios/', get_story_scenarios, name='get_story_scenarios'),
     
