@@ -18,5 +18,7 @@
   "terminal.integrated.defaultProfile.windows": "Command Prompt",
   "terminal.integrated.env.windows": {
     "PYTHONPATH": "${workspaceFolder}/backend" // BENARKAN "PYTHONPATH"
-  }
+  },
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python-envs.pythonProjects": []
 }
