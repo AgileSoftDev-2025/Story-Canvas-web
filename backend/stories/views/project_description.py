@@ -12,11 +12,13 @@ def get_request_data(request):
     """Helper function to get data from request based on method"""
     if request.method == 'GET':
         return request.GET.dict()
-    else:
+    elif request.method in ['POST', 'PUT', 'PATCH']:
         try:
             return json.loads(request.body)
         except json.JSONDecodeError:
             return {}
+    else:
+        return {}
         
 def add_cors_headers(response):
     """Helper to add CORS headers to response"""
@@ -255,7 +257,7 @@ def get_project_stats(request, project_id):
 @csrf_exempt
 def get_projects_history(request):
     """
-    Get all projects for the authenticated user with JWT protection
+    Get all projects for the authenticated user
     GET /api/history/projects/
     """
     try:

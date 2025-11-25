@@ -34,10 +34,6 @@ function HistoryContent() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  console.log('🎯 HISTORY COMPONENT RENDERED');
-  console.log('User:', user);
-  console.log('Loading state:', loading);
-
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,47 +46,70 @@ function HistoryContent() {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   // ✅ Fetch projects based on logged-in user
-  // Temporary simple version untuk test
   const fetchUserProjects = async () => {
-    console.log('🧪 SIMPLE TEST VERSION');
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
+      setError(null);
+
       const token = localStorage.getItem('access_token');
 
-      console.log('1. Token check:', !!token);
-      if (!token) throw new Error('No token');
-
-      console.log('2. Starting fetch...');
-      const startTime = Date.now();
-
-      const response = await fetch('http://127.0.0.1:8000/api/history/projects/', {
+      const response = await fetch('http://127.0.0.1:5173/api/history/projects/', {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Important for CORS with credentials
       });
 
-      const endTime = Date.now();
-      console.log(`3. Fetch completed in ${endTime - startTime}ms`);
-      console.log('4. Response status:', response.status);
+      if (!response.ok) {
+        if (response.status === 0) {
+          // Network error or CORS blocked
+          throw new Error('Network error: Unable to connect to server. Check CORS configuration.');
+        }
+        if (response.status === 401) {
+          await logout();
+          return;
+        }
+        if (response.status === 500) {
+          throw new Error('Server error: Please check backend CORS configuration.');
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-      if (!response.ok) throw new Error(`Status: ${response.status}`);
+      const data = await response.json();
 
-      const text = await response.text();
-      console.log('5. Response text:', text.substring(0, 200));
-
-      const data = JSON.parse(text);
-      console.log('6. Parsed data:', data);
-
-      setProjects(data.data || []);
-
+      if (data.success) {
+        setProjects(data.data);
+        setFilteredProjects(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to load projects');
+      }
     } catch (err) {
-      console.error('💥 SIMPLE TEST ERROR:', err);
-      setError('Failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      console.error('Error fetching projects:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load projects';
+      setError(errorMessage);
+
+      if (errorMessage.includes('CORS') || errorMessage.includes('Network')) {
+        console.error('CORS/Network Issue Detected:');
+        console.error('- Backend URL:', 'http://127.0.0.1:8000');
+        console.error('- Frontend URL:', window.location.origin);
+        console.error('- Check django-cors-headers is installed and configured');
+      }
+
     } finally {
       setLoading(false);
-      console.log('7. FINISHED');
     }
   };
+
+  useEffect(() => {
+    fetchUserProjects();
+  }, [user]);
 
   // ✅ Filter projects based on search term
   useEffect(() => {
