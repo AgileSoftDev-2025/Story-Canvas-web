@@ -13,31 +13,26 @@ export interface LocalUser extends BaseEntity {
   last_login: string;
 }
 
+// In localStorageModels.ts
 export interface LocalProject {
   project_id: string;
   user_id: string;
-  
-  // Core project info
   title: string;
   objective: string;
   scope: string;
   flow: string;
   additional_info: string;
-  
-  // Analysis data
   domain: string;
   language: string;
-  nlp_analysis: Record<string, any>;
-  
-  // JSON data storage
   users_data: string[];
   features_data: string[];
-  
-  status: 'draft' | 'in_progress' | 'completed' | 'archived';
-  
-  // Timestamps
+  nlp_analysis: Record<string, any>;
+  status: 'draft' | 'in_progress' | 'completed';
   created_at: string;
   updated_at: string;
+  // Optional fields
+  is_guest_project?: boolean;
+  user_specific?: boolean;
 }
 
 export interface LocalUserStory {

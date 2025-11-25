@@ -9,6 +9,16 @@ export default defineConfig({
     noExternal: ["react-router-dom"],
   },
   server: {
+    host: '127.0.0.1',  // Force Vite to use IP address
+    port: 5173,
+    strictPort: true,   // Don't try other ports if 5173 is busy
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',  // Match Django server
+        changeOrigin: true,
+        secure: false,
+      }
+    },
     hmr: {
       overlay: false, // to disable the red overlay error
     },

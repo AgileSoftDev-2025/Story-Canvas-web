@@ -36,6 +36,35 @@ export class LocalStorageService {
     }
     return LocalStorageService.instance;
   }
+  
+  // ===== PROJECT OPERATIONS =====
+// Add this method to your LocalStorageService class
+saveProject(projectData: Omit<LocalProject, 'project_id' | 'created_at' | 'updated_at'> & { 
+  project_id?: string 
+}): LocalProject {
+  console.log('💾 Saving project:', projectData);
+  
+  try {
+    // If project_id exists, it's an update
+    if (projectData.project_id) {
+      const { project_id, ...updates } = projectData;
+      const updatedProject = this.updateProject(project_id, updates);
+      if (!updatedProject) {
+        throw new Error(`Project with ID ${project_id} not found`);
+      }
+      return updatedProject;
+    } 
+    // Otherwise, it's a create
+    else {
+      // Remove any optional fields that shouldn't be in create
+      const { is_guest_project, user_specific, ...createData } = projectData;
+      return this.createProject(createData);
+    }
+  } catch (error) {
+    console.error('❌ Error saving project:', error);
+    throw error;
+  }
+}
 
   // ===== USER OPERATIONS =====
   setCurrentUser(user: Omit<LocalUser, 'id' | 'created_at' | 'updated_at'>): LocalUser {
@@ -106,28 +135,41 @@ export class LocalStorageService {
   }
 
   getProject(projectId: string): LocalProject | null {
-    try {
-      const projects = this.getAllProjects();
-      const project = projects.find(p => p.project_id === projectId) || null;
-      console.log(`🔍 Getting project ${projectId}:`, project ? 'Found' : 'Not found');
-      return project;
-    } catch (error) {
-      console.error('❌ Error getting project:', error);
+  try {
+    const projects = this.getAllProjects();
+    const project = projects.find(p => p.project_id === projectId) || null;
+    
+    // Don't return user projects from localStorage
+    if (project && project.user_specific) {
+      console.log(`🔒 Project ${projectId} is user-specific, not returning from localStorage`);
       return null;
     }
+    
+    console.log(`🔍 Getting project ${projectId}:`, project ? 'Found' : 'Not found');
+    return project;
+  } catch (error) {
+    console.error('❌ Error getting project:', error);
+    return null;
   }
+}
+
+
 
   getAllProjects(): LocalProject[] {
-    try {
-      const projectsStr = localStorage.getItem(this.KEYS.PROJECTS);
-      const projects = projectsStr ? JSON.parse(projectsStr) : [];
-      console.log(`📚 Retrieved ${projects.length} projects from localStorage`);
-      return projects;
-    } catch (error) {
-      console.error('❌ Error getting all projects:', error);
-      return [];
-    }
+  try {
+    const projectsStr = localStorage.getItem(this.KEYS.PROJECTS);
+    const projects = projectsStr ? JSON.parse(projectsStr) : [];
+    
+    // Filter out user projects (they should come from API)
+    const guestProjects = projects.filter((p: LocalProject) => !p.user_specific);
+    
+    console.log(`📚 Retrieved ${guestProjects.length} guest projects from localStorage`);
+    return guestProjects;
+  } catch (error) {
+    console.error('❌ Error getting all projects:', error);
+    return [];
   }
+}
 
   updateProject(projectId: string, updates: Partial<LocalProject>): LocalProject | null {
     try {

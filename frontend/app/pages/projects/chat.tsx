@@ -133,13 +133,7 @@ export default function Chat() {
       
       // Navigate setelah delay singkat
       setTimeout(() => {
-        navigate("/UserStoryPage", { 
-          state: { 
-            projectId,
-            mode,
-            projectTitle: projectService.generateProjectTitle(formData.goal)
-          } 
-        });
+        navigate("/user-stories");
       }, 1000);
 
     } catch (err) {
