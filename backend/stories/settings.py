@@ -43,8 +43,6 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     # CORS MIDDLEWARE MUST BE AT THE VERY TOP
     'corsheaders.middleware.CorsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'stories.middleware.cors_middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',  
@@ -121,58 +119,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ============================
 
 AUTH_USER_MODEL = 'stories.CustomUser'
-
-# ============================
-# CORS CONFIGURATION - FIXED
-# ============================
-
-# CORS settings - DEVELOPMENT
-CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins in development
-
-# Atau lebih spesifik:
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000", 
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-]
-
-# Allow credentials
-CORS_ALLOW_CREDENTIALS = True
-
-# Allowed methods
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-
-# Allowed headers
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
-
-# Expose headers
-CORS_EXPOSE_HEADERS = [
-    'content-type',
-    'authorization',
-]
-
-# Preflight cache
-CORS_PREFLIGHT_MAX_AGE = 86400
 
 # ============================
 # REST FRAMEWORK CONFIGURATION
