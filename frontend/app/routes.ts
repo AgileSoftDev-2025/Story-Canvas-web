@@ -9,8 +9,8 @@ export default [
   route("history", "routes/history.tsx"),
   route("about", "routes/about.tsx"),
   route("edit-wireframe", "routes/editwireframe.tsx"),
-  route("wireframe-generated", "routes/wireframegenerated.tsx"),
-  route("user-stories", "routes/userstory.tsx"),
+  route("wireframe-generated/:projectId", "routes/wireframegenerated.tsx"),
+  route("user-stories/:projectId", "routes/userstory.tsx"), // ✅ ADD projectId PARAMETER
   route("user-stories-edit", "routes/userstory-edit.tsx"),
   route("history-detail", "routes/HistoryDetail.tsx"),
   route("preview-final", "routes/preview.tsx"),

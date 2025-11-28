@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { projectService } from "../../services/projectService";
 import { localStorageService } from "../../utils/localStorageService";
+import type { LocalProject } from "../../utils/localStorageModels";
 
 interface ProjectFormData {
   goal: string;
@@ -32,8 +33,10 @@ export default function Chat() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mode, setMode] = useState<'guest' | 'user'>('guest');
+  const [existingProject, setExistingProject] = useState<LocalProject | null>(null);
+  const [isEditing, setIsEditing] = useState(true);
 
-  // Load existing project data ketika component mount
+  // Load existing project ketika component mount
   useEffect(() => {
     console.log('🔄 Chat component mounted');
     console.log('Auth loading:', authLoading);
@@ -41,27 +44,30 @@ export default function Chat() {
     console.log('User:', user);
 
     if (!authLoading) {
+      loadExistingProject();
+      
       if (isAuthenticated && user) {
         setMode('user');
         console.log('✅ User mode activated:', user.username);
       } else {
         setMode('guest');
         console.log('🟡 Guest mode activated');
-        loadGuestProject();
       }
     }
   }, [isAuthenticated, user, authLoading]);
 
-  const loadGuestProject = () => {
+  const loadExistingProject = () => {
     try {
-      console.log('📥 Loading guest project...');
-      // Load existing guest project jika ada
+      console.log('📥 Loading existing project...');
+      
+      // Ambil proyek terbaru dari localStorage
       const projects = localStorageService.getAllProjects();
       console.log('Found projects:', projects.length);
       
       if (projects.length > 0) {
         const recentProject = projects[0]; // Ambil project terbaru
-        console.log('Loading existing project:', recentProject);
+        setExistingProject(recentProject);
+        
         setFormData({
           goal: recentProject.objective || "",
           users: Array.isArray(recentProject.users_data) 
@@ -74,19 +80,28 @@ export default function Chat() {
           scope: recentProject.scope || "",
           info: recentProject.additional_info || "",
         });
-        console.log('✅ Loaded existing guest project:', recentProject.project_id);
+        
+        // Cek status untuk menentukan apakah bisa edit
+        const canEdit = !['completed', 'archived', 'submitted'].includes(recentProject.status);
+        setIsEditing(canEdit);
+        
+        console.log(`✅ Loaded existing project: ${recentProject.title} (${recentProject.status}) - Editable: ${canEdit}`);
       } else {
         console.log('ℹ️ No existing projects found');
+        setExistingProject(null);
+        setIsEditing(true);
       }
     } catch (error) {
-      console.error('❌ Error loading guest project:', error);
+      console.error('❌ Error loading existing project:', error);
     }
   };
 
-  // Handle text change
+  // Handle text change - hanya jika editable
   const handleChange = (field: keyof ProjectFormData, value: string) => {
+    if (!isEditing) return;
+    
     setFormData((prev) => ({ ...prev, [field]: value }));
-    setError(""); // clear error when typing
+    setError("");
   };
 
   // Debug function
@@ -97,6 +112,11 @@ export default function Chat() {
 
   // Validate and submit
   const handleSubmit = async () => {
+    if (!isEditing && existingProject) {
+      setError("⚠️ Project yang sudah disubmit tidak bisa diedit");
+      return;
+    }
+
     console.log('🔄 SUBMISSION STARTED ==========');
     
     // Validasi form
@@ -116,8 +136,43 @@ export default function Chat() {
 
       if (mode === 'guest') {
         console.log('🟡 MODE: GUEST - Using localStorage');
-        projectId = await projectService.createGuestProject(formData);
-        console.log('✅ Guest project creation completed with ID:', projectId);
+        
+        if (existingProject) {
+          // Update existing project dengan status submitted
+          const updatedProject = localStorageService.updateProject(existingProject.project_id, {
+            objective: formData.goal,
+            users_data: formData.users.split(',').map(u => u.trim()).filter(u => u),
+            features_data: formData.fitur.split(',').map(f => f.trim()).filter(f => f),
+            flow: formData.alur,
+            scope: formData.scope,
+            additional_info: formData.info,
+            status: 'completed' // Set status ke submitted
+          });
+          
+          if (!updatedProject) {
+            throw new Error('Failed to update project');
+          }
+          projectId = updatedProject.project_id;
+          console.log('✅ Guest project submitted:', projectId);
+        } else {
+          // Create new project dengan status submitted
+          const newProject = localStorageService.createProject({
+            user_id: localStorageService.getCurrentUser()?.id || 'guest',
+            title: projectService.generateProjectTitle(formData.goal),
+            objective: formData.goal,
+            scope: formData.scope,
+            flow: formData.alur,
+            additional_info: formData.info,
+            domain: "general",
+            language: "en",
+            nlp_analysis: {},
+            users_data: formData.users.split(',').map(u => u.trim()).filter(u => u),
+            features_data: formData.fitur.split(',').map(f => f.trim()).filter(f => f),
+            status: 'completed' // Langsung set status submitted
+          });
+          projectId = newProject.project_id;
+          console.log('✅ New guest project created and submitted:', projectId);
+        }
       } else {
         console.log('🔵 MODE: USER - Using API');
         if (!token) {
@@ -127,19 +182,25 @@ export default function Chat() {
         console.log('✅ User project creation completed with ID:', projectId);
       }
 
+      // Set form tidak bisa edit lagi
+      setIsEditing(false);
+      
+      // Reload project untuk mendapatkan data terbaru
+      loadExistingProject();
+
       // Show success message
-      setError("✅ Project saved successfully! Redirecting...");
-      console.log('🎉 Project saved successfully!');
+      setError("✅ Project submitted successfully! Redirecting...");
+      console.log('🎉 Project submitted successfully!');
       
       // Navigate setelah delay singkat
       setTimeout(() => {
-        navigate("/user-stories");
+        navigate(`/user-stories/${projectId}`); // Add projectId to URL
       }, 1000);
 
     } catch (err) {
       const errorMessage = err instanceof Error 
         ? err.message 
-        : 'Failed to save project. Please try again.';
+        : 'Failed to submit project. Please try again.';
       
       setError(`❌ ${errorMessage}`);
       console.error("❌ SUBMISSION ERROR:", err);
@@ -156,6 +217,18 @@ export default function Chat() {
   };
 
   const completionPercentage = calculateCompletion();
+
+  // Get status badge color
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'draft': return 'bg-blue-100 text-blue-800';
+      case 'in_progress': return 'bg-yellow-100 text-yellow-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'archived': return 'bg-gray-100 text-gray-800';
+      case 'submitted': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
 
   // Show loading while checking authentication
   if (authLoading) {
@@ -214,6 +287,37 @@ export default function Chat() {
               </div>
             )}
           </div>
+
+          {/* Existing Project Info */}
+          {existingProject && (
+            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-800">
+                    📋 {existingProject.title}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Last modified: {new Date(existingProject.updated_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadge(existingProject.status)}`}>
+                    {existingProject.status.toUpperCase()}
+                  </span>
+                  {!isEditing && (
+                    <span className="text-red-600 text-sm font-medium">
+                      🔒 Locked - Cannot Edit
+                    </span>
+                  )}
+                </div>
+              </div>
+              {!isEditing && (
+                <p className="text-sm text-gray-600 mt-2">
+                  Project sudah disubmit dan tidak bisa diedit lagi. Buat project baru untuk perubahan.
+                </p>
+              )}
+            </div>
+          )}
           
           {/* Progress Bar */}
           <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
@@ -245,8 +349,13 @@ export default function Chat() {
             value={formData.goal}
             onChange={(e) => handleChange("goal", e.target.value)}
             placeholder="Ex: Help individuals manage their finances, track expenses, and make smarter investment decisions through AI-driven insights and automation."
-            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className={`w-full p-3 rounded-md border text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+              !isEditing 
+                ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                : 'border-gray-300'
+            }`}
             rows={3}
+            disabled={!isEditing}
           />
           <div className="text-xs text-gray-500 mt-1">
             {formData.goal.length}/500 characters {formData.goal.length < 10 && "(minimum 10 characters)"}
@@ -260,8 +369,13 @@ export default function Chat() {
             value={formData.users}
             onChange={(e) => handleChange("users", e.target.value)}
             placeholder="Ex: Individual Users, Financial Advisors, Investment Managers, Administrators"
-            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className={`w-full p-3 rounded-md border text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+              !isEditing 
+                ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                : 'border-gray-300'
+            }`}
             rows={2}
+            disabled={!isEditing}
           />
           <div className="text-xs text-gray-500 mt-1">
             Separate multiple users with commas
@@ -275,8 +389,13 @@ export default function Chat() {
             value={formData.fitur}
             onChange={(e) => handleChange("fitur", e.target.value)}
             placeholder="Ex: Automated expense tracking, AI-driven budgeting, personalized investment suggestions, etc."
-            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className={`w-full p-3 rounded-md border text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+              !isEditing 
+                ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                : 'border-gray-300'
+            }`}
             rows={3}
+            disabled={!isEditing}
           />
           <div className="text-xs text-gray-500 mt-1">
             Separate multiple features with commas
@@ -290,8 +409,13 @@ export default function Chat() {
             value={formData.alur}
             onChange={(e) => handleChange("alur", e.target.value)}
             placeholder="Ex: User links bank accounts → System tracks transactions → AI generates budget plan → ..."
-            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className={`w-full p-3 rounded-md border text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+              !isEditing 
+                ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                : 'border-gray-300'
+            }`}
             rows={3}
+            disabled={!isEditing}
           />
         </section>
 
@@ -302,8 +426,13 @@ export default function Chat() {
             value={formData.scope}
             onChange={(e) => handleChange("scope", e.target.value)}
             placeholder="Ex: Focuses on personal finance and investment guidance for individuals."
-            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className={`w-full p-3 rounded-md border text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+              !isEditing 
+                ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                : 'border-gray-300'
+            }`}
             rows={2}
+            disabled={!isEditing}
           />
         </section>
 
@@ -314,32 +443,48 @@ export default function Chat() {
             value={formData.info}
             onChange={(e) => handleChange("info", e.target.value)}
             placeholder="Any other additional context or constraints about your project."
-            className="w-full p-3 rounded-md border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            className={`w-full p-3 rounded-md border text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+              !isEditing 
+                ? 'bg-gray-100 border-gray-300 cursor-not-allowed' 
+                : 'border-gray-300'
+            }`}
             rows={2}
+            disabled={!isEditing}
           />
         </section>
 
-        {/* Submit Button */}
+        {/* Submit & Continue Buttons */}
         <div className="absolute bottom-10 right-12">
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className={`
-              bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold px-8 py-3 rounded-full shadow-lg
-              transform transition-all duration-200 hover:scale-105 hover:shadow-xl
-              disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
-              min-w-[160px]
-            `}
-          >
-            {isSubmitting ? (
-              <div className="flex items-center justify-center">
-                <div className="w-5 h-5 border-t-2 border-white border-solid rounded-full animate-spin mr-2"></div>
-                {mode === 'guest' ? 'Saving...' : 'Creating...'}
-              </div>
-            ) : (
-              mode === 'guest' ? 'Save Project' : 'Create Project'
-            )}
-          </button>
+          {!isEditing && existingProject ? (
+            // Jika sudah submit, show continue button
+            <button
+              onClick={() => navigate(`/user-stories/${existingProject?.project_id}`)}
+              className="bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold px-8 py-3 rounded-full shadow-lg transform transition-all duration-200 hover:scale-105 hover:shadow-xl min-w-[160px]"
+            >
+              Continue to Next Page →
+            </button>
+          ) : (
+            // Jika belum submit, show submit button
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className={`
+                bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold px-8 py-3 rounded-full shadow-lg
+                transform transition-all duration-200 hover:scale-105 hover:shadow-xl
+                disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
+                min-w-[160px]
+              `}
+            >
+              {isSubmitting ? (
+                <div className="flex items-center justify-center">
+                  <div className="w-5 h-5 border-t-2 border-white border-solid rounded-full animate-spin mr-2"></div>
+                  Submitting...
+                </div>
+              ) : (
+                'Submit Project'
+              )}
+            </button>
+          )}
         </div>
       </main>
 

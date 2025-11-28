@@ -177,10 +177,8 @@ class ProjectService {
     if (!goal.trim()) {
       return `Project ${new Date().toLocaleDateString('id-ID')}`;
     }
-
-    // Ambil 3-4 kata pertama dari goal sebagai judul
     const words = goal.split(/\s+/).slice(0, 4).join(' ');
-    return `${words} - ${new Date().toLocaleDateString('id-ID')}`;
+    return `${words}`;
   }
 
   // Validasi form data

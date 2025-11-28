@@ -13,7 +13,6 @@ export interface LocalUser extends BaseEntity {
   last_login: string;
 }
 
-// In localStorageModels.ts
 export interface LocalProject {
   project_id: string;
   user_id: string;
@@ -76,6 +75,12 @@ export interface LocalWireframe {
   
   preview_url: string;
   
+  // NEW FIELDS - Added for wireframe generation
+  stories_count: number;
+  features_count: number;
+  generated_at: string;
+  is_local?: boolean;
+  
   // Timestamps
   created_at: string;
   updated_at: string;
@@ -102,3 +107,107 @@ export interface LocalScenario {
   created_at: string;
   updated_at: string;
 }
+
+// Additional interfaces for session and history tracking
+export interface LocalSession {
+  session_id: string;
+  project_id: string;
+  project_title: string;
+  wireframes_generated: number;
+  generated_at: string;
+  is_local?: boolean;
+}
+
+export interface LocalHistory {
+  history_id: string;
+  session_id: string;
+  action_type: string;
+  description: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
+
+// Interface for API responses to match the expected format
+export interface WireframeGenerationResponse {
+  success: boolean;
+  message: string;
+  wireframes: LocalWireframe[];
+  session?: LocalSession;
+  count: number;
+}
+
+export interface UserStoryGenerationResponse {
+  success: boolean;
+  message: string;
+  stories: LocalUserStory[];
+  count: number;
+}
+
+// Interface for project data sent to local APIs
+export interface LocalProjectData {
+  title: string;
+  objective: string;
+  users: string[];
+  features: string[];
+  scope: string;
+  flow: string;
+  additional_info: string;
+  domain: string;
+}
+
+// Interface for wireframe data from local APIs
+export interface LocalWireframeData {
+  wireframe_id: string;
+  project_id: string;
+  page_name: string;
+  html_content: string;
+  creole_documentation: string;
+  salt_uml: string;
+  features_count: number;
+  stories_count: number;
+  generated_at: string;
+  is_local: boolean;
+}
+
+// Interface for service responses
+export interface ServiceResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// Type guards for runtime type checking
+export const isLocalProject = (obj: any): obj is LocalProject => {
+  return obj && 
+    typeof obj.project_id === 'string' &&
+    typeof obj.title === 'string' &&
+    typeof obj.objective === 'string';
+};
+
+export const isLocalUserStory = (obj: any): obj is LocalUserStory => {
+  return obj && 
+    typeof obj.story_id === 'string' &&
+    typeof obj.story_text === 'string' &&
+    typeof obj.role === 'string';
+};
+
+export const isLocalWireframe = (obj: any): obj is LocalWireframe => {
+  return obj && 
+    typeof obj.wireframe_id === 'string' &&
+    typeof obj.page_name === 'string' &&
+    typeof obj.html_content === 'string';
+};
+
+export const isLocalScenario = (obj: any): obj is LocalScenario => {
+  return obj && 
+    typeof obj.scenario_id === 'string' &&
+    typeof obj.scenario_text === 'string' &&
+    typeof obj.scenario_type === 'string';
+};
+
+// Utility types for creation (without auto-generated fields)
+export type CreateLocalProject = Omit<LocalProject, 'project_id' | 'created_at' | 'updated_at'>;
+export type CreateLocalUserStory = Omit<LocalUserStory, 'story_id' | 'created_at' | 'updated_at'>;
+export type CreateLocalWireframe = Omit<LocalWireframe, 'wireframe_id' | 'created_at' | 'updated_at'>;
+export type CreateLocalScenario = Omit<LocalScenario, 'scenario_id' | 'created_at' | 'updated_at'>;

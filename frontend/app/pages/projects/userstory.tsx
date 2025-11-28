@@ -6,8 +6,6 @@ import { localStorageService } from "../../utils/localStorageService";
 import type { LocalUserStory, LocalProject } from "../../utils/localStorageModels";
 import { useAuth } from "../../context/AuthContext";
 
-const PLACEHOLDER_PROJECT_ID = '6918ccf4-391b-4012-9fce-be89f5421dec';
-
 // Interface untuk form data
 interface UserStoryFormData {
   story_text: string;
@@ -32,7 +30,20 @@ class UserStoryService {
     return UserStoryService.instance;
   }
 
-  // Generate user stories via API
+  // NEW: Unified method that handles both online and offline modes
+  async generateUserStories(projectId: string, projectData?: LocalProject): Promise<any> {
+    const isAuthenticated = !!localStorage.getItem('access_token');
+    
+    if (isAuthenticated) {
+      console.log('🟢 ONLINE MODE: Using authenticated API');
+      return await this.generateUserStoriesOnline(projectId);
+    } else {
+      console.log('🟡 OFFLINE MODE: Using local project API');
+      return await this.generateUserStoriesOfflineAPI(projectId, projectData);
+    }
+  }
+
+  // Generate user stories via API (authenticated) - KEEP EXISTING
   async generateUserStoriesOnline(projectId: string): Promise<any> {
     try {
       console.log('Attempting to generate user stories for project:', projectId);
@@ -43,7 +54,6 @@ class UserStoryService {
         throw new Error('No authentication token found');
       }
 
-      // MENGGUNAKAN ENDPOINT YANG DIMINTA
       const response = await fetch(`/api/projects/${projectId}/generate-user-stories/`, {
         method: 'POST',
         headers: {
@@ -63,12 +73,10 @@ class UserStoryService {
       const data = await response.json();
       console.log('API Response data:', data);
 
-      // Validasi response structure
       if (!data.success) {
         throw new Error(data.error || data.message || 'Generation failed on server');
       }
 
-      // Simpan data ke local storage
       if (data.data) {
         this.syncAPIDataToLocalStorage(data.data, projectId);
       }
@@ -80,7 +88,175 @@ class UserStoryService {
     }
   }
 
-  // Generate user stories offline
+  // NEW: Generate user stories via API for local projects (no auth required)
+  async generateUserStoriesOfflineAPI(projectId: string, projectData?: LocalProject): Promise<any> {
+    try {
+      console.log('🔄 Generating user stories for local project via API:', projectId);
+
+      // Get project data from localStorage if not provided
+      const project = projectData || localStorageService.getProject(projectId);
+      if (!project) {
+        throw new Error('Project not found in localStorage');
+      }
+
+      // Prepare project data for the API
+      const apiProjectData = {
+        title: project.title,
+        objective: project.objective || '',
+        users: Array.isArray(project.users_data) ? project.users_data : [],
+        features: Array.isArray(project.features_data) ? project.features_data : [],
+        scope: project.scope || '',
+        flow: project.flow || '',
+        additional_info: project.additional_info || '',
+        domain: project.domain || 'general'
+      };
+
+      console.log('Sending project data to local API:', apiProjectData);
+
+      // Call the new endpoint for local projects
+      const response = await fetch('/api/local-projects/generate-user-stories/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          project_data: apiProjectData,
+          project_id: projectId 
+        })
+      });
+
+      console.log('Local API Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Local API Error:', errorText);
+        throw new Error(`Local API error! status: ${response.status}, message: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Local API Response data:', data);
+
+      if (!data.success) {
+        throw new Error(data.error || data.message || 'Local generation failed on server');
+      }
+
+      // Save the generated stories to localStorage
+      if (data.stories && Array.isArray(data.stories)) {
+        this.saveStoriesToLocalStorage(data.stories, projectId);
+        console.log(`✅ Saved ${data.stories.length} stories to localStorage`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error generating user stories via local API:', error);
+      
+      console.log('🔄 Falling back to template-based generation');
+      return this.generateUserStoriesOfflineFallback(projectId);
+    }
+  }
+
+  // NEW: Fallback to template generation when API fails
+  private async generateUserStoriesOfflineFallback(projectId: string): Promise<any> {
+    try {
+      const project = localStorageService.getProject(projectId);
+      if (!project) {
+        throw new Error('Project not found in localStorage');
+      }
+
+      const stories = this.generateUserStoriesOffline(project);
+      
+      return {
+        success: true,
+        message: `Generated ${stories.length} user stories using templates`,
+        stories: stories.map(story => ({
+          story_id: story.story_id,
+          story_text: story.story_text,
+          role: story.role,
+          action: story.action,
+          benefit: story.benefit,
+          feature: story.feature,
+          acceptance_criteria: story.acceptance_criteria,
+          priority: story.priority,
+          story_points: story.story_points,
+          status: story.status,
+          generated_by_llm: false,
+          iteration: 1
+        })),
+        count: stories.length
+      };
+    } catch (error) {
+      console.error('Template generation also failed:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Save API stories to localStorage
+  private saveStoriesToLocalStorage(apiStories: any[], projectId: string): void {
+    try {
+      console.log('💾 Saving API stories to localStorage');
+      
+      // Clear existing stories for this project
+      const existingStories = localStorageService.getUserStoriesByProject(projectId);
+      existingStories.forEach(story => {
+        localStorageService.deleteUserStory(story.story_id);
+      });
+
+      // Save new stories
+      apiStories.forEach((apiStory: any) => {
+        const localStory: Omit<LocalUserStory, 'story_id' | 'created_at' | 'updated_at'> = {
+          project_id: projectId,
+          story_text: apiStory.story_text || apiStory.text || '',
+          role: apiStory.role || 'User',
+          action: apiStory.action || this.extractActionFromStory(apiStory.story_text || apiStory.text || ''),
+          benefit: apiStory.benefit || this.extractBenefitFromStory(apiStory.story_text || apiStory.text || ''),
+          feature: apiStory.feature || 'General',
+          acceptance_criteria: apiStory.acceptance_criteria || [],
+          priority: (apiStory.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium',
+          story_points: apiStory.story_points || 0,
+          status: (apiStory.status as 'draft' | 'reviewed' | 'approved' | 'implemented') || 'draft',
+          generated_by_llm: apiStory.generated_by_llm !== undefined ? apiStory.generated_by_llm : true,
+          iteration: apiStory.iteration || 1
+        };
+
+        localStorageService.createUserStory(localStory);
+      });
+      
+      console.log(`✅ Successfully saved ${apiStories.length} stories to localStorage`);
+    } catch (error) {
+      console.error('Failed to save stories to localStorage:', error);
+    }
+  }
+
+  // NEW: Helper methods for story parsing
+  private extractActionFromStory(storyText: string): string {
+    try {
+      if (storyText.includes('I want to')) {
+        const actionPart = storyText.split('I want to')[1];
+        if (actionPart.includes('so that')) {
+          return actionPart.split('so that')[0].trim();
+        }
+        return actionPart.trim();
+      }
+      return 'use the system';
+    } catch {
+      return 'use the system';
+    }
+  }
+
+  private extractBenefitFromStory(storyText: string): string {
+    try {
+      if (storyText.includes('so that')) {
+        return storyText.split('so that')[1].trim().replace(/\.$/, '');
+      }
+      return 'achieve their goals';
+    } catch {
+      return 'achieve their goals';
+    }
+  }
+
+  // KEEP ALL EXISTING METHODS - NO CHANGES BELOW THIS LINE
+
+  // Generate user stories offline (template-based) - KEEP EXISTING
   generateUserStoriesOffline(project: LocalProject): LocalUserStory[] {
     console.log('Generating user stories offline for project:', project);
 
@@ -115,7 +291,6 @@ class UserStoryService {
         const action = template.actions[i % template.actions.length];
         const benefit = `achieve ${action.replace(/\s+/g, ' ')} efficiently`;
 
-        // Define priority with proper type
         let priority: 'low' | 'medium' | 'high' | 'critical';
         if (i === 0) priority = 'high';
         else if (i === 1) priority = 'medium';
@@ -149,7 +324,7 @@ class UserStoryService {
     return userStories;
   }
 
-  // Sync API data to localStorage
+  // Sync API data to localStorage - KEEP EXISTING
   private syncAPIDataToLocalStorage(apiStories: any[], projectId: string): void {
     try {
       console.log('Syncing API data to localStorage');
@@ -185,24 +360,6 @@ class UserStoryService {
     return string.charAt(0).toUpperCase() + string.slice(1);
   }
 }
-
-const buildFallbackProject = (projectId?: string): LocalProject => ({
-  project_id: projectId || 'fallback-project',
-  user_id: 'local-user',
-  title: 'Contoh Project Fallback',
-  objective: 'Data project contoh karena project di localStorage tidak ditemukan.',
-  scope: 'Demo scope',
-  flow: 'Demo flow',
-  additional_info: '',
-  domain: 'general',
-  language: 'en',
-  nlp_analysis: {},
-  users_data: [],
-  features_data: [],
-  status: 'draft',
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-});
 
 // Komponen Modal untuk Create/Edit User Story
 const UserStoryModal: React.FC<{
@@ -248,7 +405,6 @@ const UserStoryModal: React.FC<{
     onSave(storyData);
   };
 
-  // Handler untuk perubahan select yang memastikan type safety
   const handlePriorityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value as 'low' | 'medium' | 'high' | 'critical';
     setFormData(prev => ({ ...prev, priority: value }));
@@ -448,61 +604,115 @@ export default function UserStoryPage() {
   const [project, setProject] = useState<LocalProject | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStory, setEditingStory] = useState<LocalUserStory | null>(null);
-  const [autoGenerated, setAutoGenerated] = useState(false);
 
   const userStoryService = UserStoryService.getInstance();
 
-  // Debug logging
-  console.log('UserStoryPage initialized with projectId:', projectId);
-  console.log('Authentication status:', isAuthenticated);
-  console.log('User:', user);
-
   useEffect(() => {
-    console.log('useEffect triggered with projectId:', projectId);
-    loadProjectData();
-    checkAndGenerateStories();
+    console.log('UserStoryPage initialized with projectId:', projectId);
+    console.log('Authentication status:', isAuthenticated);
+    console.log('User:', user);
+    
+    if (projectId) {
+      loadProjectData();
+      checkAndGenerateStories();
+    } else {
+      setError('Project ID is required');
+      setLoading(false);
+    }
   }, [projectId, isAuthenticated]);
 
-  const loadProjectData = () => {
-    const activeProjectId = projectId || PLACEHOLDER_PROJECT_ID;
-    console.log('Loading project data for projectId:', activeProjectId);
+  const handleGenerateStories = async () => {
+    if (!projectId) {
+      setError('Project ID is required');
+      return;
+    }
 
-    const projectData = projectId ? localStorageService.getProject(activeProjectId) : null;
+    setGenerating(true);
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    const progressInterval = simulateProgress();
+
+    try {
+      const project = localStorageService.getProject(projectId);
+      if (!project) {
+        throw new Error('Project not found in localStorage');
+      }
+
+      console.log('🔄 Generating stories for project:', project.title);
+      
+      // Use the unified method that handles both online/offline
+      const result = await userStoryService.generateUserStories(projectId, project);
+      
+      if (result.success) {
+        const successMsg = `Successfully generated ${result.count || 0} user stories!`;
+        console.log(successMsg);
+        setSuccess(successMsg);
+        
+        setProgress(100);
+        setTimeout(() => {
+          loadUserStories();
+          setGenerating(false);
+          setLoading(false);
+        }, 500);
+      } else {
+        throw new Error(result.error || 'Generation failed');
+      }
+
+    } catch (err) {
+      console.error('Generation error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Generation failed';
+      setError(`Failed to generate user stories: ${errorMessage}`);
+      
+      setGenerating(false);
+      setLoading(false);
+    } finally {
+      clearInterval(progressInterval);
+    }
+  };
+
+  const loadProjectData = () => {
+    if (!projectId) {
+      setError('Project ID is required');
+      return;
+    }
+
+    const projectData = localStorageService.getProject(projectId);
     console.log('Project data from localStorage:', projectData);
 
     if (projectData) {
       setError(null);
       setProject(projectData);
+    } else {
+      setError('Project not found');
+    }
+  };
+
+  const checkAndGenerateStories = async () => {
+    if (!projectId) {
+      setError('Project ID is required');
+      setLoading(false);
       return;
     }
 
-    const fallbackProject = buildFallbackProject(activeProjectId);
-    setProject(fallbackProject);
-    setError(null);
-  };
-
-
-  const checkAndGenerateStories = async () => {
-    const activeProjectId = projectId || project?.project_id || PLACEHOLDER_PROJECT_ID;
-    console.log('Checking and generating stories for projectId:', activeProjectId);
     setError(null);
 
-    const projectData =
-      (projectId && localStorageService.getProject(projectId)) ||
-      project ||
-      buildFallbackProject(activeProjectId);
+    const projectData = localStorageService.getProject(projectId);
+    if (!projectData) {
+      setError('Project not found');
+      setLoading(false);
+      return;
+    }
 
-    const resolvedProject = projectData;
-    setProject(resolvedProject);
+    setProject(projectData);
 
-    const targetProjectId = projectId || resolvedProject.project_id;
-    const existingStories = localStorageService.getUserStoriesByProject(targetProjectId);
-    console.log(`Found ${existingStories.length} existing stories for project ${targetProjectId}`);
+    const existingStories = localStorageService.getUserStoriesByProject(projectId);
+    console.log(`Found ${existingStories.length} existing stories for project ${projectId}`);
 
-    if (existingStories.length === 0 && !autoGenerated) {
+    if (existingStories.length === 0) {
       console.log('No existing stories found, auto-generating...');
-      await handleGenerateStories(targetProjectId, resolvedProject);
-      setAutoGenerated(true);
+      await handleGenerateStories();
     } else {
       console.log('Loading existing stories...');
       setUserStories(existingStories);
@@ -513,10 +723,11 @@ export default function UserStoryPage() {
   };
 
   const loadUserStories = () => {
-    const activeProjectId = projectId || project?.project_id || PLACEHOLDER_PROJECT_ID;
+    if (!projectId) return;
+
     try {
       setError(null);
-      const stories = localStorageService.getUserStoriesByProject(activeProjectId);
+      const stories = localStorageService.getUserStoriesByProject(projectId);
       console.log('Loaded user stories:', stories);
       setUserStories(stories);
       groupStoriesByRole(stories);
@@ -554,175 +765,15 @@ export default function UserStoryPage() {
     return interval;
   };
 
-  const handleGenerateStories = async (targetProjectId?: string, targetProject?: LocalProject | null) => {
-    const activeProjectId = targetProjectId || projectId || project?.project_id || PLACEHOLDER_PROJECT_ID;
-    console.log('Handle generate stories called for projectId:', activeProjectId);
-
-    const projectData = targetProject || project || localStorageService.getProject(activeProjectId) || buildFallbackProject(activeProjectId);
-    setProject(projectData);
-
-    setGenerating(true);
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-
-    const progressInterval = simulateProgress();
-
-    try {
-      let result;
-
-      const canUseOnline = isAuthenticated && !!projectId;
-
-      if (canUseOnline) {
-        console.log('Attempting online generation...');
-        // MENGGUNAKAN ENDPOINT YANG DIMINTA
-        result = await userStoryService.generateUserStoriesOnline(activeProjectId);
-
-        if (result.success) {
-          const successMsg = `Successfully generated ${result.count || 0} user stories with AI!`;
-          console.log(successMsg);
-          setSuccess(successMsg);
-        } else {
-          throw new Error(result.error || 'Failed to generate user stories');
-        }
-      } else {
-        console.log('Using offline generation...');
-        // Offline mode
-        const generatedStories = userStoryService.generateUserStoriesOffline(projectData);
-        const successMsg = `Successfully generated ${generatedStories.length} user stories locally!`;
-        console.log(successMsg);
-        setSuccess(successMsg);
-      }
-
-      setProgress(100);
-
-      // Tunggu sebentar agar progress bar terlihat complete
-      setTimeout(() => {
-        loadUserStories();
-        setGenerating(false);
-        setLoading(false);
-      }, 500);
-
-    } catch (err) {
-      console.error('Generation error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Generation failed';
-
-      // Fallback ke offline generation jika online gagal
-      if (canUseOnline) {
-        console.log('Online generation failed, trying offline fallback...');
-        try {
-          userStoryService.generateUserStoriesOffline(projectData);
-          setSuccess(`Generated stories offline as fallback!`);
-          loadUserStories();
-        } catch (fallbackError) {
-          setError(`Both online and offline generation failed: ${errorMessage}`);
-        }
-      } else {
-        setError(`Failed to generate user stories: ${errorMessage}`);
-      }
-
-      setGenerating(false);
-      setLoading(false);
-    } finally {
-      clearInterval(progressInterval);
-    }
-  };
-
-  const handleCreateStory = () => {
-    setEditingStory(null);
-    setModalOpen(true);
-  };
-
-  const handleEditStory = (story: LocalUserStory) => {
-    setEditingStory(story);
-    setModalOpen(true);
-  };
-
-  const handleSaveStory = async (storyData: any) => {
-    const activeProjectId = projectId || project?.project_id || PLACEHOLDER_PROJECT_ID;
-    try {
-      setError(null);
-      setSuccess(null);
-
-      // Validasi dan konversi tipe data
-      const validatedData = {
-        ...storyData,
-        priority: storyData.priority as 'low' | 'medium' | 'high' | 'critical',
-        status: storyData.status as 'draft' | 'reviewed' | 'approved' | 'implemented',
-        story_points: typeof storyData.story_points === 'string'
-          ? parseInt(storyData.story_points) || 0
-          : storyData.story_points
-      };
-
-      if (editingStory) {
-        // Update existing story
-        const updatedStory: LocalUserStory = {
-          ...editingStory,
-          ...validatedData,
-          updated_at: new Date().toISOString()
-        };
-
-        const allStories = localStorageService.getAllUserStories();
-        const updatedStories = allStories.map(story =>
-          story.story_id === editingStory.story_id ? updatedStory : story
-        );
-        localStorage.setItem('local_user_stories', JSON.stringify(updatedStories));
-
-        setSuccess('Story updated successfully!');
-      } else {
-        // Create new story
-        const newStoryData = {
-          ...validatedData,
-          project_id: activeProjectId,
-          generated_by_llm: false,
-          iteration: 1
-        };
-
-        // Create in localStorage
-        localStorageService.createUserStory(newStoryData);
-        setSuccess('Story created successfully!');
-      }
-
-      setModalOpen(false);
-      loadUserStories();
-
-    } catch (error) {
-      console.error('Error saving story:', error);
-      setError('Failed to save story. Please try again.');
-    }
-  };
-
-  const handleDeleteStory = async (storyId: string) => {
-    if (!window.confirm('Are you sure you want to delete this user story?')) {
-      return;
-    }
-
-    try {
-      // Delete from localStorage
-      const allStories = localStorageService.getAllUserStories();
-      const filteredStories = allStories.filter(story => story.story_id !== storyId);
-      localStorage.setItem('local_user_stories', JSON.stringify(filteredStories));
-
-      setSuccess('Story deleted successfully!');
-      loadUserStories();
-
-    } catch (error) {
-      console.error('Error deleting story:', error);
-      setError('Failed to delete story. Please try again.');
-    }
-  };
-
   const handleAccept = () => {
-    if (projectId) {
-      navigate(`/projects/${projectId}/generate-wireframes`);
-    } else {
-      navigate('/wireframes');
-    }
-  };
-
-  const handleRefresh = () => {
-    loadUserStories();
-  };
+  if (projectId) {
+    // Pass projectId as route parameter
+    navigate(`/wireframe-generated/${projectId}`);
+  } else {
+    // Fallback if no projectId (shouldn't happen normally)
+    navigate('/wireframe-generated');
+  }
+};
 
   if (loading) {
     return (
@@ -738,7 +789,6 @@ export default function UserStoryPage() {
               }
             </p>
 
-            {/* Progress Bar untuk Generating */}
             {generating && (
               <div className="mt-4 w-64 mx-auto">
                 <div className="flex justify-between items-center mb-2">
@@ -790,41 +840,14 @@ export default function UserStoryPage() {
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex gap-2">
-              <button
-                onClick={handleRefresh}
-                className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
-                title="Refresh data"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh
-              </button>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={handleCreateStory}
-                className="rounded-lg bg-gradient-to-r from-[#5561AA] to-[#4699DF] px-4 py-2 font-medium text-white shadow-sm hover:opacity-95"
-              >
-                Create Story
-              </button>
-              <button
-                onClick={handleGenerateStories}
-                disabled={generating}
-                className="rounded-lg border border-[#4699DF] bg-white px-4 py-2 font-medium text-[#4699DF] shadow-sm hover:bg-blue-50 disabled:opacity-50 dark:border-[#4699DF] dark:bg-gray-800 dark:text-[#4699DF] dark:hover:bg-gray-700"
-              >
-                {generating ? 'Generating...' : (isAuthenticated ? 'Regenerate with AI' : 'Regenerate')}
-              </button>
-              <button
-                onClick={handleAccept}
-                className="rounded-lg bg-gradient-to-r from-[#5F3D89] to-[#4699DF] px-4 py-2 font-medium text-white shadow-sm hover:opacity-95"
-              >
-                Continue
-              </button>
-            </div>
+          {/* REMOVED: Refresh, Create Story, and Regenerate buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleAccept}
+              className="rounded-lg bg-gradient-to-r from-[#5F3D89] to-[#4699DF] px-4 py-2 font-medium text-white shadow-sm hover:opacity-95"
+            >
+              Continue
+            </button>
           </div>
         </div>
 
@@ -910,19 +933,12 @@ export default function UserStoryPage() {
                 : "Get started by generating user stories locally."
               }
             </p>
-            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="mt-6 flex justify-center">
               <button
-                onClick={handleGenerateStories}
-                disabled={generating}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[#4699DF] hover:bg-[#3a7bbf] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#4699DF] disabled:opacity-50"
+                onClick={handleAccept}
+                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[#4699DF] hover:bg-[#3a7bbf] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#4699DF]"
               >
-                {generating ? 'Generating...' : (isAuthenticated ? 'Generate with AI' : 'Generate Stories')}
-              </button>
-              <button
-                onClick={handleCreateStory}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
-              >
-                Create Manual Story
+                Continue to Next Page
               </button>
             </div>
           </div>
@@ -1006,20 +1022,6 @@ export default function UserStoryPage() {
                             ` • Updated: ${new Date(story.updated_at).toLocaleDateString()}`
                           }
                         </div>
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => handleEditStory(story)}
-                            className="rounded-lg px-3 py-1 text-sm font-medium text-[#4699DF] bg-white border border-[#4699DF] hover:bg-blue-50 transition-colors dark:border-[#4699DF] dark:bg-gray-800 dark:text-[#4699DF] dark:hover:bg-gray-700"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteStory(story.story_id)}
-                            className="rounded-lg px-3 py-1 text-sm font-medium text-red-600 bg-white border border-red-300 hover:bg-red-50 transition-colors dark:border-red-600 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-red-900/20"
-                          >
-                            Delete
-                          </button>
-                        </div>
                       </div>
                     </div>
                   ))}
@@ -1029,13 +1031,17 @@ export default function UserStoryPage() {
           </div>
         )}
 
-        {/* User Story Modal */}
-        <UserStoryModal
-          isOpen={modalOpen}
-          onClose={() => setModalOpen(false)}
-          onSave={handleSaveStory}
-          editingStory={editingStory}
-        />
+        {/* Continue Button at Bottom */}
+        {userStories.length > 0 && (
+          <div className="flex justify-center mt-8">
+            <button
+              onClick={handleAccept}
+              className="rounded-lg bg-gradient-to-r from-[#5F3D89] to-[#4699DF] px-8 py-3 font-medium text-white shadow-sm hover:opacity-95 text-lg"
+            >
+              Continue to Wireframes
+            </button>
+          </div>
+        )}
       </main>
 
       <Footer />
