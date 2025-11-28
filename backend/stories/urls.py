@@ -6,7 +6,9 @@ from stories.views.project_description import (
     update_project,
     delete_project,
     get_project_stats,
-    get_projects_history
+    get_projects_history,
+    update_project,
+    delete_project,
 )
 
 from stories.views.export_preview import (
@@ -91,10 +93,10 @@ urlpatterns = [
     path('api/projects/', get_projects, name='get_projects'),
     path('api/projects/create/', create_project, name='create_project'),
     path('api/projects/<str:project_id>/', get_project, name='get_project'),
-    path('api/projects/<str:project_id>/update/', update_project, name='update_project'),
-    path('api/projects/<str:project_id>/delete/', delete_project, name='delete_project'),
     path('api/projects/<str:project_id>/stats/', get_project_stats, name='get_project_stats'),
     path('api/history/projects/', get_projects_history, name='get_projects_history'),
+    path('api/projects/<str:project_id>/update/', update_project, name='update_project'),
+    path('api/projects/<str:project_id>/delete/', delete_project, name='delete_project'),
 
     # User Stories endpoints
     path('api/user-stories/', get_user_stories, name='get_user_stories'),
