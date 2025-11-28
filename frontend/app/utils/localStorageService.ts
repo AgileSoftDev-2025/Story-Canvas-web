@@ -171,6 +171,27 @@ saveProject(projectData: Omit<LocalProject, 'project_id' | 'created_at' | 'updat
   }
 }
 
+deleteUserStory(storyId: string): boolean {
+  try {
+    const stories = this.getAllUserStories();
+    const storyIndex = stories.findIndex(s => s.story_id === storyId);
+    
+    if (storyIndex === -1) {
+      console.log('❌ User story not found for deletion:', storyId);
+      return false;
+    }
+    
+    stories.splice(storyIndex, 1);
+    localStorage.setItem(this.KEYS.USER_STORIES, JSON.stringify(stories));
+    
+    console.log('✅ User story deleted:', storyId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error deleting user story:', error);
+    return false;
+  }
+}
+
   updateProject(projectId: string, updates: Partial<LocalProject>): LocalProject | null {
     try {
       const projects = this.getAllProjects();

@@ -8,21 +8,38 @@ from django.conf import settings
 
 class ProjectRAGVectorDB:
     def __init__(self, collection_name="project_patterns"):
-        # Use Django settings or environment variables directly
-        self.embed_model = SentenceTransformer(os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2'))
+        # FIX: Initialize embedding model with proper device handling
+        try:
+            self.embed_model = SentenceTransformer(
+                os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2'),
+                device='cpu'  # Force CPU to avoid GPU/meta tensor issues
+            )
+        except Exception as e:
+            print(f"⚠️ Error initializing embedding model: {e}")
+            # Fallback: don't initialize embed_model for UI patterns
+            self.embed_model = None
+        
         chroma_path = os.getenv('CHROMA_PATH', './project_rag_store')
         
-        self.client = chromadb.Client(Settings(
-            persist_directory=chroma_path,
-            is_persistent=True
-        ))
-        self.collection = self._initialize_collection(collection_name)
+        # FIX: Initialize ChromaDB with proper error handling
+        try:
+            self.client = chromadb.Client(Settings(
+                persist_directory=chroma_path,
+                is_persistent=True
+            ))
+            self.collection = self._initialize_collection(collection_name)
+        except Exception as e:
+            print(f"⚠️ Error initializing ChromaDB: {e}")
+            self.client = None
+            self.collection = None
+        
         self.project_patterns = self._get_project_patterns()
         self.ui_patterns = self._get_ui_patterns()
         self._populate_vector_db()
 
     def _initialize_collection(self, collection_name):
         try:
+            # FIX: Use ChromaDB's built-in embedding function
             return self.client.get_or_create_collection(
                 name=collection_name,
                 embedding_function=embedding_functions.SentenceTransformerEmbeddingFunction(
@@ -104,6 +121,10 @@ class ProjectRAGVectorDB:
     def _populate_vector_db(self):
         """EXACT SAME population logic as Colab"""
         try:
+            if not self.collection:
+                print("⚠️ No collection available, skipping population")
+                return
+                
             current_count = self.collection.count()
             if current_count == 0:
                 documents = []
@@ -138,6 +159,10 @@ class ProjectRAGVectorDB:
     def retrieve_similar_patterns(self, query: str, k: int = 3):
         """EXACT SAME retrieval logic as Colab"""
         try:
+            if not self.collection:
+                print("⚠️ No collection available, using fallback patterns")
+                return [{'metadata': pattern} for pattern in self.project_patterns[:k]]
+                
             n_results = max(1, min(k, self.collection.count()))
             if n_results == 0:
                 print("⚠️ No patterns in DB, using fallback patterns")
@@ -231,6 +256,11 @@ class ProjectRAGVectorDB:
     def retrieve_ui_patterns(self, query: str, k: int = 2):
         """EXACT SAME UI pattern retrieval as Colab"""
         try:
+            # FIX: Check if embed_model is available
+            if not self.embed_model:
+                print("⚠️ Embedding model not available, using keyword-based UI pattern matching")
+                return self._retrieve_ui_patterns_keyword_based(query, k)
+            
             query_embedding = self.embed_model.encode([query])[0]
             
             patterns_with_similarity = []
@@ -254,9 +284,39 @@ class ProjectRAGVectorDB:
             
         except Exception as e:
             print(f"⚠️ Error in UI pattern retrieval: {e}")
-            fallback = [{'metadata': pattern} for pattern in self.ui_patterns[:k]]
-            print(f"⚠️ Using {len(fallback)} fallback UI patterns")
-            return fallback
+            return self._retrieve_ui_patterns_keyword_based(query, k)
+
+    def _retrieve_ui_patterns_keyword_based(self, query: str, k: int = 2):
+        """Fallback keyword-based UI pattern retrieval"""
+        query_lower = query.lower()
+        
+        # Simple keyword matching
+        patterns_with_score = []
+        for pattern in self.ui_patterns:
+            score = 0
+            pattern_text = f"{pattern['page_type']} {pattern['description']} {pattern['best_practices']}".lower()
+            
+            # Check for exact matches
+            if query_lower in pattern_text:
+                score += 10
+            if any(keyword in query_lower for keyword in pattern_text.split()):
+                score += 5
+            if pattern['page_type'].lower() in query_lower:
+                score += 8
+                
+            patterns_with_score.append({
+                'metadata': pattern,
+                'score': score
+            })
+        
+        patterns_with_score.sort(key=lambda x: x['score'], reverse=True)
+        result = [{'metadata': p['metadata']} for p in patterns_with_score[:k] if p['score'] > 0]
+        
+        if not result:
+            result = [{'metadata': pattern} for pattern in self.ui_patterns[:k]]
+            
+        print(f"✅ Retrieved {len(result)} UI patterns using keyword matching for: {query}")
+        return result
 
     def get_all_project_patterns(self):
         return self.project_patterns
@@ -266,6 +326,13 @@ class ProjectRAGVectorDB:
 
     def get_collection_stats(self):
         try:
+            if not self.collection:
+                return {
+                    "error": "No collection available",
+                    "project_patterns_count": len(self.project_patterns),
+                    "ui_patterns_count": len(self.ui_patterns)
+                }
+                
             count = self.collection.count()
             return {
                 "total_patterns": count,

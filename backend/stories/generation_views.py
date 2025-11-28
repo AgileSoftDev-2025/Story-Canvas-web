@@ -1,7 +1,8 @@
+from datetime import datetime, time
 import os
 import json
 import re
-from datetime import datetime
+from django.utils import timezone
 from django.http import JsonResponse
 from django.views import View
 from rest_framework import viewsets, status
@@ -411,6 +412,62 @@ def generate_user_stories(request, project_id):
     
 @api_view(['POST'])
 @permission_classes([AllowAny])
+def generate_user_stories_for_local_project(request):
+    """
+    Generate user stories for local (non-database) projects
+    POST /api/local-projects/generate-user-stories/
+    """
+    try:
+        # Get project data from request body (not from database)
+        project_data = request.data.get('project_data')
+        if not project_data:
+            return JsonResponse({
+                'success': False,
+                'error': 'Project data required'
+            }, status=400)
+        
+        # Use your existing UserStoryGenerator
+        generator = UserStoryGenerator()
+        rag_db = ProjectRAGVectorDB()
+        
+        # Generate stories using the same logic but with provided project data
+        project_info = {
+            'title': project_data.get('title', 'Local Project'),
+            'objective': project_data.get('objective', ''),
+            'users': project_data.get('users', []),
+            'features': project_data.get('features', []),
+            'scope': project_data.get('scope', ''),
+            'flow': project_data.get('flow', ''),
+            'additional_info': project_data.get('additional_info', '')
+        }
+        
+        # Analyze project
+        project_description = generator.format_project_description(project_info)
+        project_analysis = analyze_project_description(project_description)
+        
+        # Get similar patterns
+        similar_patterns = rag_db.retrieve_similar_patterns(project_description, k=3)
+        
+        # Generate stories
+        stories_data = generator.generate_comprehensive_user_stories(
+            project_info, project_analysis, similar_patterns
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Generated {len(stories_data)} user stories for local project',
+            'stories': stories_data,  # Return the raw story data
+            'count': len(stories_data)
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def generate_wireframes(request, project_id):
     """
     Generates HTML wireframes for all user stories in this project PLUS langsung generate Creole & Salt UML
@@ -451,6 +508,345 @@ def generate_wireframes(request, project_id):
             'success': False,
             'error': str(e)
         }, status=500)
+    
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def generate_wireframes_for_local_project(request):
+    """
+    Generate HTML wireframes for local (non-database) projects with user stories
+    POST /api/local-projects/generate-wireframes/
+    """
+
+    import time
+    time.sleep(2)  # Add 2-second delay between API calls
+
+    try:
+        print("🔍 DEBUG: Starting wireframe generation - datetime imports fixed")
+        # Get project data and user stories from request body
+        project_data = request.data.get('project_data')
+        user_stories_data = request.data.get('user_stories', [])
+        project_id = request.data.get('project_id')
+        
+        if not project_data:
+            return JsonResponse({
+                'success': False,
+                'error': 'Project data required'
+            }, status=400)
+        
+        if not user_stories_data:
+            return JsonResponse({
+                'success': False,
+                'error': 'User stories data required'
+            }, status=400)
+        
+        # Initialize wireframe generator and RAG
+        wireframe_generator = WireframeGenerator()
+        rag_db = ProjectRAGVectorDB()
+        
+        # Prepare project info for wireframe generation
+        project_info = {
+            'title': project_data.get('title', 'Local Project'),
+            'objective': project_data.get('objective', ''),
+            'users': project_data.get('users', []),
+            'features': project_data.get('features', []),
+            'scope': project_data.get('scope', ''),
+            'flow': project_data.get('flow', ''),
+            'additional_info': project_data.get('additional_info', ''),
+            'domain': project_data.get('domain', 'general')
+        }
+        
+        print(f"🔄 Generating wireframes for local project: {project_info['title']}")
+        print(f"📝 Processing {len(user_stories_data)} user stories")
+        
+        # Generate HTML wireframes dengan RAG
+        try:
+            html_docs = wireframe_generator.generate_html_documentation(
+                project_info, 
+                user_stories_data, 
+                rag_db
+            )
+        except Exception as e:
+            print(f"⚠️ RAG wireframe generation failed: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Wireframe generation failed: {str(e)}'
+            }, status=500)
+        
+        # Generate Creole & Salt UML documentation
+        try:
+            creole_salt_docs = _generate_creole_salt_local(
+                project_info,
+                user_stories_data,
+                html_docs
+            )
+        except Exception as e:
+            print(f"⚠️ Creole/Salt generation failed: {e}")
+            creole_salt_docs = {
+                "creole_documentation": "Documentation generation completed",
+                "salt_uml_diagrams": "@startuml\ntitle System Overview\nactor User\nUser -> System : Interacts\n@enduml",
+                "features_count": len(set(story.get('feature', 'General') for story in user_stories_data)),
+                "total_stories": len(user_stories_data)
+            }
+        
+        # Save wireframes to local storage
+        saved_wireframes = _save_wireframes_local(
+            project_id,
+            project_info,
+            html_docs,
+            creole_salt_docs
+        )
+        
+        # Create session record for local project
+        session_data = _create_local_session(project_id, project_info, len(saved_wireframes))
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Generated {len(saved_wireframes)} wireframes with Creole and Salt UML for local project',
+            'wireframes': saved_wireframes,
+            'session': session_data,
+            'count': len(saved_wireframes)
+        }, status=200)
+        
+    except Exception as e:
+        print(f"❌ Error generating wireframes for local project: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+    
+def _generate_creole_salt_local(project_info, user_stories_data, html_docs):
+    """
+    Generate Creole and Salt UML documentation for local projects
+    """
+    print("📋 Generating Creole and Salt UML documentation...")
+    
+    try:
+        # Group stories by feature for better organization
+        features = {}
+        for story in user_stories_data:
+            feature = story.get('feature', 'General')
+            features.setdefault(feature, []).append(story)
+        
+        # Generate Creole documentation
+        creole_content = f"""
+= {project_info.get('title', 'Local Project')} Documentation
+
+== Project Overview
+
+* **Title**: {project_info.get('title', 'Local Project')}
+* **Objective**: {project_info.get('objective', 'Not specified')}
+* **Scope**: {project_info.get('scope', 'Not specified')}
+
+== User Stories by Feature
+
+"""
+        
+        for feature, stories in features.items():
+            creole_content += f"=== {feature}\n\n"
+            for i, story in enumerate(stories, 1):
+                creole_content += f"{i}. {story.get('story_text', 'Story')}\n"
+                creole_content += f"   * Role: {story.get('role', 'User')}\n"
+                creole_content += f"   * Priority: {story.get('priority', 'medium')}\n"
+                creole_content += f"   * Points: {story.get('story_points', 0)}\n\n"
+        
+        # Generate basic Salt UML for main flows
+        salt_content = f"""
+@startuml
+title {project_info.get('title', 'Local Project')} - System Overview
+
+actor User
+
+"""
+        
+        # Add basic system components based on features
+        for feature in features.keys():
+            salt_content += f'rectangle "{feature}" as {feature.replace(" ", "").lower()}\n'
+        
+        salt_content += """
+User --> Authentication
+User --> Dashboard
+Dashboard --> Profile
+Dashboard --> Analytics
+
+@enduml
+"""
+        
+        return {
+            "creole_documentation": creole_content.strip(),
+            "salt_uml_diagrams": salt_content.strip(),
+            "features_count": len(features),
+            "total_stories": len(user_stories_data)
+        }
+        
+    except Exception as e:
+        print(f"⚠️ Creole/Salt generation failed: {e}")
+        return {
+            "creole_documentation": "Documentation generation failed",
+            "salt_uml_diagrams": "@startuml\nerror Generation failed\n@enduml",
+            "features_count": 0,
+            "total_stories": len(user_stories_data)
+        }
+    
+
+
+def _save_wireframes_local(project_id, project_info, html_docs, creole_salt_docs):
+    """
+    Simulate saving wireframes for local projects (return data instead of DB objects)
+    """
+    print("💾 Saving wireframe data for local project...")
+    
+    wireframes_data = []
+    
+    # FIX: Use consistent timestamp generation
+    from django.utils import timezone
+    # ❌ REMOVE THIS: import time  # Remove this import if not needed elsewhere
+    
+    current_time = timezone.now().isoformat()
+    
+    for page_name, html_content in html_docs.get('role_pages', {}).items():
+        # FIX: Use consistent ID generation without time.time()
+        wireframe_id = f"local_{project_id}_{page_name}_{int(timezone.now().timestamp())}"
+        
+        wireframe_data = {
+            'wireframe_id': wireframe_id,
+            'project_id': project_id,
+            'page_name': page_name,
+            'html_content': html_content,
+            'creole_documentation': creole_salt_docs.get('creole_documentation', ''),
+            'salt_uml': creole_salt_docs.get('salt_uml_diagrams', ''),
+            'features_count': creole_salt_docs.get('features_count', 0),
+            'stories_count': creole_salt_docs.get('total_stories', 0),
+            'generated_at': current_time,
+            'is_local': True
+        }
+        wireframes_data.append(wireframe_data)
+    
+    return wireframes_data
+
+def _create_local_session(project_id, project_info, wireframes_count):
+    """
+    Create session record for local project - FIXED datetime issue
+    """
+    # FIX: Remove time.time() usage
+    from django.utils import timezone
+    
+    session_data = {
+        'session_id': f"local_session_{project_id}_{int(timezone.now().timestamp())}",
+        'project_id': project_id,
+        'project_title': project_info.get('title', 'Local Project'),
+        'wireframes_generated': wireframes_count,
+        'generated_at': timezone.now().isoformat(),
+        'is_local': True
+    }
+    
+    return session_data
+
+def _generate_wireframes_fallback_local(project_info, user_stories_data):
+    """
+    Fallback wireframe generation when RAG fails completely
+    """
+    print("🔄 Using comprehensive fallback wireframe generation...")
+    
+    # Group stories by role for basic page structure
+    pages = {}
+    for story in user_stories_data:
+        role = story.get('role', 'user')
+        pages.setdefault(role, []).append(story)
+    
+    # Generate basic HTML for each role/page
+    role_pages = {}
+    for role, stories in pages.items():
+        page_name = f"{role.lower().replace(' ', '-')}-page"
+        
+        # Create comprehensive HTML structure
+        stories_html = "".join([
+            f'<div class="story-card"><h4>{story.get("story_text", "Story")}</h4><p>Feature: {story.get("feature", "General")}</p></div>'
+            for story in stories
+        ])
+        
+        html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{page_name.title()} - {project_info.get('title', 'Project')}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        .header {{ background: linear-gradient(135deg, #4699DF, #5561AA); color: white; padding: 30px; border-radius: 8px 8px 0 0; }}
+        .content {{ padding: 30px; }}
+        .stories-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 30px 0; }}
+        .story-card {{ border: 1px solid #e1e5e9; padding: 20px; border-radius: 6px; background: #fafbfc; }}
+        .form-section {{ background: #f8f9fa; padding: 25px; border-radius: 6px; margin: 30px 0; }}
+        .form-group {{ margin: 15px 0; }}
+        label {{ display: block; margin-bottom: 8px; font-weight: 600; color: #2d3748; }}
+        input, textarea, select {{ width: 100%; padding: 12px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px; }}
+        .btn {{ background: #4699DF; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }}
+        .btn:hover {{ background: #3a7bbf; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{role} Dashboard</h1>
+            <p>{project_info.get('title', 'Project')} - {role} Interface</p>
+        </div>
+        
+        <div class="content">
+            <section class="stories-section">
+                <h2>User Stories ({len(stories)} stories)</h2>
+                <div class="stories-grid">
+                    {stories_html}
+                </div>
+            </section>
+            
+            <section class="form-section">
+                <h2>Action Interface</h2>
+                <form>
+                    <div class="form-group">
+                        <label for="primary-action">Primary Action</label>
+                        <select id="primary-action">
+                            <option value="">Select an action</option>
+                            <option value="monitor">Monitor Data</option>
+                            <option value="manage">Manage Resources</option>
+                            <option value="analyze">Analyze Reports</option>
+                            <option value="configure">Configure Settings</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="data-input">Data Input</label>
+                        <textarea id="data-input" rows="4" placeholder="Enter relevant data or information..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="priority">Priority Level</label>
+                        <select id="priority">
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn">Execute Action</button>
+                </form>
+            </section>
+        </div>
+    </div>
+</body>
+</html>
+        """
+        role_pages[page_name] = html_content
+    
+    return {
+        "role_pages": role_pages,
+        "generated_date": timezone.now().isoformat(),
+        "used_rag_patterns": False
+    }
+
+
 
 def _save_wireframes_with_creole_salt(project, html_docs):
     """Saves generated HTML wireframes PLUS langsung generate Creole dan Salt UML"""

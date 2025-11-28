@@ -72,7 +72,9 @@ from stories.generation_views import (
     generate_creole,
     generate_salt_diagram,
     render_png_diagram,
-    ai_edit_wireframe
+    ai_edit_wireframe,
+    generate_user_stories_for_local_project,
+    generate_wireframes_for_local_project
 )
 
 
@@ -129,8 +131,6 @@ urlpatterns = [
     path('api/scenarios/create/project/<str:project_id>/', create_scenario, name='create_scenario_for_project'),
     path('api/scenarios/<str:scenario_id>/update/', update_scenario, name='update_scenario'),
     path('api/scenarios/<str:scenario_id>/delete/', delete_scenario, name='delete_scenario'),
-    path('api/scenarios/<str:scenario_id>/', get_scenario_detail, name='get_scenario_detail'),
-    path('api/scenarios/<str:scenario_id>/accept/', accept_scenarios, name='accept_scenarios'),
 
     # ========== WIREFRAME ENDPOINTS ==========
     path('api/projects/<str:project_id>/wireframes/', list_wireframes, name='list_wireframes'),
@@ -160,7 +160,8 @@ urlpatterns = [
 
     # User story generation
     path('api/user-stories/<str:story_id>/generate-scenarios/', generate_story_scenarios, name='generate_story_scenarios'),
-    path('api/user-stories/<str:story_id>/generate-scenarios-api/', generate_story_scenarios_api, name='generate_story_scenarios_api'),
+    path('api/local-projects/generate-user-stories/', generate_user_stories_for_local_project, name='generate_user_stories_for_local_project'),
+    path('api/local-projects/generate-wireframes/', generate_wireframes_for_local_project, name='generate_wireframes_for_local_project'),
     path('api/user-stories/<str:story_id>/ai-edit/', ai_edit_user_story, name='ai_edit_user_story'),
     path('api/user-stories/<str:story_id>/ai-edit-scenarios/', ai_edit_story_scenarios, name='ai_edit_story_scenarios'),
 
