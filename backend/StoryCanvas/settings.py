@@ -78,14 +78,6 @@ TEMPLATES = [
     },
 ]
 
-# RAG Configuration
-RAG_CONFIG = {
-    'model_id': os.getenv('RAG_MODEL_ID', 'ibm-granite/granite-3.3-8b-instruct'),
-    'chroma_path': os.getenv('RAG_CHROMA_PATH', './project_rag_store'),
-    'collection_name': os.getenv('RAG_COLLECTION_NAME', 'project_patterns'),
-    'embedding_model': os.getenv('RAG_EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
-}
-
 WSGI_APPLICATION = 'StoryCanvas.wsgi.application'
 AUTH_USER_MODEL = 'stories.CustomUser'
 
@@ -191,3 +183,9 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Replicate API Configuration
+REPLICATE_API_TOKEN = os.environ.get('REPLICATE_API_TOKEN', 'r8_EmI71U9RM6QgLvDgep4dTYbucvUjjru46Y3Ek')
+
+# SpaCy model (optional)
+SPACY_MODEL = 'en_core_web_sm'

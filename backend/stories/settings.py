@@ -4,7 +4,8 @@ Django settings for your_project project.
 
 import os
 from pathlib import Path
-from dotenv import load_dotenv  # Optional: for .env support
+from dotenv import load_dotenv
+from datetime import timedelta
 
 # Load environment variables
 load_dotenv()
@@ -13,12 +14,11 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'your-secret-key-here')
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-your-secret-key-here')
 
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = ['*'] if DEBUG else os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # Application definition
 INSTALLED_APPS = [
@@ -29,19 +29,23 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    # Third party apps
+    # Third party apps - HARUS DITAMBAHKAN SEBELUM APPS SENDIRI
+    'corsheaders',
     'rest_framework',
-    'rest_framework_simplejwt',  # ✅ TAMBAHKAN INI
-    'corsheaders',  # Optional: for frontend integration
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     
     # Your apps
     'stories',
 ]
 
+# MIDDLEWARE ORDER IS CRITICAL FOR CORS!
 MIDDLEWARE = [
+    # CORS MIDDLEWARE MUST BE AT THE VERY TOP
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # Optional: for frontend
+    'django.contrib.sessions.middleware.SessionMiddleware',  
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -49,8 +53,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# ✅ PERBAIKI INI - sesuaikan dengan nama project Anda
-ROOT_URLCONF = 'stories.urls'  # atau 'your_project.urls' sesuail dengan struktur
+ROOT_URLCONF = 'stories.urls'
+
 
 TEMPLATES = [
     {
@@ -68,8 +72,7 @@ TEMPLATES = [
     },
 ]
 
-# ✅ PERBAIKI INI - sesuaikan dengan nama project Anda
-WSGI_APPLICATION = 'stories.wsgi.application'  # atau 'your_project.wsgi.application'
+WSGI_APPLICATION = 'stories.wsgi.application'
 
 # Database
 DATABASES = {
@@ -101,7 +104,7 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
+# Static files
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
@@ -113,52 +116,52 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ============================
-# RAG & AI CONFIGURATION
+# CUSTOM USER MODEL
 # ============================
 
-# RAG Configuration
-CHROMA_PATH = os.getenv('CHROMA_PATH', './project_rag_store')
-MODEL_ID = os.getenv('MODEL_ID', 'ibm-granite/granite-3.3-8b-instruct')
-EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
-REPLICATE_API_TOKEN = os.getenv('REPLICATE_API_TOKEN')
+AUTH_USER_MODEL = 'stories.CustomUser'
 
 # ============================
 # REST FRAMEWORK CONFIGURATION
 # ============================
 
 REST_FRAMEWORK = {
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
-    
-    # ✅ PERBAIKI: Tambahkan JWT Authentication
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
     ],
-    
-    # Optional: Permission settings
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
 }
 
 # ============================
 # SIMPLE JWT CONFIGURATION
 # ============================
 
-from datetime import timedelta
-
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': False,
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
 }
 
 # ============================
-# CORS CONFIGURATION (Optional)
+# RAG & AI CONFIGURATION
 # ============================
+
+CORS_ALLOW_ALL_ORIGINS = True  # Untuk development saja
+CORS_ALLOW_CREDENTIALS = True
 
 # If you have a frontend, configure CORS
 CORS_ALLOWED_ORIGINS = [
@@ -168,8 +171,26 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only in development
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
 
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 # ============================
 # LOGGING CONFIGURATION
 # ============================
@@ -177,46 +198,43 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only in development
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'handlers': {
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'django.log',
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
         },
+    },
+    'handlers': {
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
         },
     },
     'loggers': {
         'django': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': True,
         },
         'stories': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'corsheaders': {
+            'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': False,
         },
     },
 }
 
-# ============================
-# CUSTOM SETTINGS
-# ============================
-
 # Story Canvas Specific Settings
 STORY_CANVAS_CONFIG = {
     'max_iterations': 3,
     'default_priority': 'medium',
-    'supported_domains': [
-        'E-commerce', 'Healthcare', 'Education', 
-        'Finance', 'Social Media', 'Agriculture'
-    ],
-    'scenario_types': [
-        'happy_path', 'alternate_path', 
-        'exception_path', 'boundary_case'
-    ],
+    'supported_domains': ['E-commerce', 'Healthcare', 'Education', 'Finance'],
+    'scenario_types': ['happy_path', 'alternate_path', 'exception_path', 'boundary_case'],
     'export_formats': ['html', 'pdf', 'word', 'json', 'zip']
 }

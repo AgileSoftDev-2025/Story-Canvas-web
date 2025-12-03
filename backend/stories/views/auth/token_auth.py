@@ -248,8 +248,6 @@ def current_user(request):
         'user': serializer.data
     })
 
-@csrf_exempt
-@jwt_token
 # stories/views/auth/token_auth.py - Update the signout function
 @csrf_exempt
 @jwt_token

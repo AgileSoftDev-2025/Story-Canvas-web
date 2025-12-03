@@ -5,8 +5,8 @@ import { Footer } from "../../components/footer";
 import { useNavigate, useParams } from "react-router-dom";
 
 // Import service dan types
-import type { Scenario, ProjectScenarioResponse, GenerateProjectScenarioResponse, AcceptProjectScenarioResponse } from "../../../services/scenarioServices";
-import { scenarioService } from "../../../services/scenarioServices";
+import type { Scenario, ProjectScenarioResponse, GenerateProjectScenarioResponse, AcceptProjectScenarioResponse } from "../../services/scenarioServices";
+import { scenarioService } from "../../services/scenarioServices";
 
 export default function HasilGenerate() {
   const [isEditing, setIsEditing] = useState(false);

@@ -1,13 +1,10 @@
 // frontend/src/utils/localStorageModels.ts
-
-// Base interface dengan UUID pendek
 export interface BaseEntity {
   id: string;
   created_at: string;
   updated_at: string;
 }
 
-// User Model (sesuai dengan CustomUser di Django)
 export interface LocalUser extends BaseEntity {
   username: string;
   email: string;
@@ -16,35 +13,27 @@ export interface LocalUser extends BaseEntity {
   last_login: string;
 }
 
-// Project Model (sesuai dengan Project di Django)
 export interface LocalProject {
   project_id: string;
   user_id: string;
-  
-  // Core project info
   title: string;
   objective: string;
   scope: string;
   flow: string;
   additional_info: string;
-  
-  // Analysis data
   domain: string;
   language: string;
+  users_data: string[];
+  features_data: string[];
   nlp_analysis: Record<string, any>;
-  
-  // JSON data storage
-  users_data: any[];
-  features_data: any[];
-  
-  status: 'draft' | 'in_progress' | 'completed' | 'archived';
-  
-  // Timestamps
+  status: 'draft' | 'in_progress' | 'completed';
   created_at: string;
   updated_at: string;
+  // Optional fields
+  is_guest_project?: boolean;
+  user_specific?: boolean;
 }
 
-// User Story Model (sesuai dengan UserStory di Django)
 export interface LocalUserStory {
   story_id: string;
   project_id: string;
@@ -68,7 +57,6 @@ export interface LocalUserStory {
   updated_at: string;
 }
 
-// Wireframe Model (sesuai dengan Wireframe di Django)
 export interface LocalWireframe {
   wireframe_id: string;
   project_id: string;
@@ -87,12 +75,17 @@ export interface LocalWireframe {
   
   preview_url: string;
   
+  // NEW FIELDS - Added for wireframe generation
+  stories_count: number;
+  features_count: number;
+  generated_at: string;
+  is_local?: boolean;
+  
   // Timestamps
   created_at: string;
   updated_at: string;
 }
 
-// Scenario Model (sesuai dengan Scenario di Django)
 export interface LocalScenario {
   scenario_id: string;
   project_id: string;
@@ -115,87 +108,106 @@ export interface LocalScenario {
   updated_at: string;
 }
 
-// Generation Session Model
-export interface LocalGenerationSession {
+// Additional interfaces for session and history tracking
+export interface LocalSession {
   session_id: string;
   project_id: string;
-  user_id: string;
-  
-  llm_model_used: string;
-  
-  user_stories_generated: number;
+  project_title: string;
   wireframes_generated: number;
-  scenarios_generated: number;
-  total_iterations: number;
-  
-  start_time: string;
-  end_time: string | null;
-  duration_seconds: number;
-  
-  status: 'running' | 'completed' | 'failed';
-  error_message: string | null;
-  
-  // Timestamps
-  created_at: string;
-  updated_at: string;
+  generated_at: string;
+  is_local?: boolean;
 }
 
-// Project History Model dengan field optional
-export interface LocalProjectHistory {
+export interface LocalHistory {
   history_id: string;
-  project_id: string;
-  user_id: string;
-  generation_session_id: string | null;
-  
-  action_type: 'project_created' | 'project_updated' | 'stories_generated' | 'wireframes_generated' | 'scenarios_generated' | 'export_created' | 'review_iteration';
-  action_details: Record<string, any>;
+  session_id: string;
+  action_type: string;
   description: string;
-  
-  related_story_id: string | null;
-  related_wireframe_id: string | null;
-  related_scenario_id: string | null;
-  
-  // Timestamps
-  created_at: string;
-  updated_at: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
 }
 
-// Type untuk membuat project history (field optional benar-benar optional)
-export type CreateProjectHistoryData = {
+// Interface for API responses to match the expected format
+export interface WireframeGenerationResponse {
+  success: boolean;
+  message: string;
+  wireframes: LocalWireframe[];
+  session?: LocalSession;
+  count: number;
+}
+
+export interface UserStoryGenerationResponse {
+  success: boolean;
+  message: string;
+  stories: LocalUserStory[];
+  count: number;
+}
+
+// Interface for project data sent to local APIs
+export interface LocalProjectData {
+  title: string;
+  objective: string;
+  users: string[];
+  features: string[];
+  scope: string;
+  flow: string;
+  additional_info: string;
+  domain: string;
+}
+
+// Interface for wireframe data from local APIs
+export interface LocalWireframeData {
+  wireframe_id: string;
   project_id: string;
-  user_id: string;
-  action_type: LocalProjectHistory['action_type'];
-  action_details: Record<string, any>;
-  description: string;
-  generation_session_id?: string | null;
-  related_story_id?: string | null;
-  related_wireframe_id?: string | null;
-  related_scenario_id?: string | null;
+  page_name: string;
+  html_content: string;
+  creole_documentation: string;
+  salt_uml: string;
+  features_count: number;
+  stories_count: number;
+  generated_at: string;
+  is_local: boolean;
+}
+
+// Interface for service responses
+export interface ServiceResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// Type guards for runtime type checking
+export const isLocalProject = (obj: any): obj is LocalProject => {
+  return obj && 
+    typeof obj.project_id === 'string' &&
+    typeof obj.title === 'string' &&
+    typeof obj.objective === 'string';
 };
 
-// Export Model
-export interface LocalExport {
-  export_id: string;
-  project_id: string;
-  user_id: string;
-  generation_session_id: string | null;
-  
-  export_format: 'html' | 'pdf' | 'word' | 'json' | 'zip';
-  file_path: string | null;
-  file_url: string | null;
-  file_size: number;
-  
-  include_stories: boolean;
-  include_wireframes: boolean;
-  include_scenarios: boolean;
-  export_config: Record<string, any>;
-  
-  status: string;
-  error_message: string | null;
-  
-  exported_at: string;
-  
-  // Timestamps
-  created_at: string;
-  updated_at: string;
-}
+export const isLocalUserStory = (obj: any): obj is LocalUserStory => {
+  return obj && 
+    typeof obj.story_id === 'string' &&
+    typeof obj.story_text === 'string' &&
+    typeof obj.role === 'string';
+};
+
+export const isLocalWireframe = (obj: any): obj is LocalWireframe => {
+  return obj && 
+    typeof obj.wireframe_id === 'string' &&
+    typeof obj.page_name === 'string' &&
+    typeof obj.html_content === 'string';
+};
+
+export const isLocalScenario = (obj: any): obj is LocalScenario => {
+  return obj && 
+    typeof obj.scenario_id === 'string' &&
+    typeof obj.scenario_text === 'string' &&
+    typeof obj.scenario_type === 'string';
+};
+
+// Utility types for creation (without auto-generated fields)
+export type CreateLocalProject = Omit<LocalProject, 'project_id' | 'created_at' | 'updated_at'>;
+export type CreateLocalUserStory = Omit<LocalUserStory, 'story_id' | 'created_at' | 'updated_at'>;
+export type CreateLocalWireframe = Omit<LocalWireframe, 'wireframe_id' | 'created_at' | 'updated_at'>;
+export type CreateLocalScenario = Omit<LocalScenario, 'scenario_id' | 'created_at' | 'updated_at'>;

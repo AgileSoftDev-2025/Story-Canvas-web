@@ -1,17 +1,18 @@
+// routes.ts
 import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
 export default [
   index("routes/home.tsx"),
-  route("Signin", "routes/signin.tsx"),
-  route("Signup", "routes/signup.tsx"),
-  route("Chat", "routes/chat.tsx"),
-  route("History", "routes/history.tsx"),
-  route("About", "routes/about.tsx"),
-  route("EditWireframe", "routes/editwireframe.tsx"),
-  route("WireframeGenerated", "routes/wireframegenerated.tsx"),
-  route("UserStoryPage", "routes/userstory.tsx"),
-  route("UserStoryEditPage", "routes/userstory-edit.tsx"),
-  route("HistoryDetail", "routes/HistoryDetail.tsx"),
-  route("PreviewFinal", "routes/preview.tsx"),
-  route("HasilGenerate/:projectId", "routes/hasilgenerate.tsx"),
+  route("signin", "routes/signin.tsx"),
+  route("signup", "routes/signup.tsx"),
+  route("chat", "routes/chat.tsx"),
+  route("history", "routes/history.tsx"),
+  route("about", "routes/about.tsx"),
+  route("edit-wireframe", "routes/editwireframe.tsx"),
+  route("wireframe-generated/:projectId", "routes/wireframegenerated.tsx"),
+  route("user-stories/:projectId", "routes/userstory.tsx"), // ✅ ADD projectId PARAMETER
+  route("user-stories-edit", "routes/userstory-edit.tsx"),
+  route("history-detail", "routes/HistoryDetail.tsx"),
+  route("preview-final", "routes/preview.tsx"),
+  route("hasil-generate", "routes/hasilgenerate.tsx"),
 ] satisfies RouteConfig;

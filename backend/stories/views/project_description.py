@@ -1,6 +1,7 @@
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 import json
+from stories import apps
 from stories.utils.decorators import api_view
 from stories.models import Project, CustomUser
 from django.views.decorators.csrf import csrf_exempt
@@ -12,21 +13,41 @@ def get_request_data(request):
     """Helper function to get data from request based on method"""
     if request.method == 'GET':
         return request.GET.dict()
-    else:
+    elif request.method in ['POST', 'PUT', 'PATCH']:
         try:
             return json.loads(request.body)
         except json.JSONDecodeError:
             return {}
+    else:
+        return {}
+        
+def add_cors_headers(response):
+    """Helper to add CORS headers to response"""
+    response["Access-Control-Allow-Origin"] = "http://localhost:5173"
+    response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 @api_view(['GET'])
+@jwt_token
 def get_projects(request):
     """
     Get all projects for the authenticated user
     GET /api/projects/
     """
     try:
-        # For now, get all projects. Later we'll filter by authenticated user
-        projects = Project.objects.all()
+        # Handle OPTIONS request for CORS preflight
+        if request.method == "OPTIONS":
+            response = HttpResponse()
+            response["Access-Control-Allow-Origin"] = "http://localhost:5173"
+            response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
+        
+        # Filter by authenticated user
+        projects = Project.objects.filter(user=request.user)
         serializer = ProjectDescriptionSerializer(projects, many=True)
         
         return JsonResponse({
@@ -42,13 +63,15 @@ def get_projects(request):
         }, status=500)
 
 @api_view(['GET'])
+@csrf_exempt
+@jwt_token
 def get_project(request, project_id):
     """
     Get specific project by ID
     GET /api/projects/{project_id}/
     """
     try:
-        project = get_object_or_404(Project, project_id=project_id)
+        project = get_object_or_404(Project, project_id=project_id, user=request.user)
         serializer = ProjectDescriptionSerializer(project)
         
         return JsonResponse({
@@ -67,24 +90,23 @@ def get_project(request, project_id):
             'error': str(e)
         }, status=500)
 
-@api_view(['POST'])
+@api_view(['POST', 'OPTIONS'])
+@jwt_token
 def create_project(request):
     """
     Create new project
     POST /api/projects/create/
     """
+    if request.method == "OPTIONS":
+        response = HttpResponse()
+        response["Access-Control-Allow-Origin"] = "http://127.0.0.1:5173"
+        response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response["Access-Control-Allow-Credentials"] = "true"
+        return response
+    
     try:
-        # TODO: Get authenticated user once authentication is implemented
-        # For now, use the first user or handle user assignment differently
-        user = CustomUser.objects.first()
-        
-        if not user:
-            return JsonResponse({
-                'success': False,
-                'error': 'No user available. Please create a user first.'
-            }, status=400)
-        
-        # Get data from request body
+        user = request.user
         data = get_request_data(request)
         
         serializer = ProjectCreateSerializer(data=data)
@@ -92,32 +114,48 @@ def create_project(request):
         if serializer.is_valid():
             project = serializer.save(user=user)
             
-            return JsonResponse({
+            response = JsonResponse({
                 'success': True,
                 'message': 'Project created successfully',
                 'data': ProjectDescriptionSerializer(project).data
             }, status=201)
+            response["Access-Control-Allow-Origin"] = "http://127.0.0.1:5173"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
         else:
-            return JsonResponse({
+            response = JsonResponse({
                 'success': False,
                 'error': 'Validation failed',
                 'details': serializer.errors
             }, status=400)
+            response["Access-Control-Allow-Origin"] = "http://127.0.0.1:5173"
+            return response
             
     except Exception as e:
-        return JsonResponse({
+        response = JsonResponse({
             'success': False,
             'error': str(e)
         }, status=500)
+        response["Access-Control-Allow-Origin"] = "http://127.0.0.1:5173"
+        return response
 
-@api_view(['PUT'])
+@api_view(['PUT', 'OPTIONS'])  # ✅ FIXED: Hanya satu fungsi update_project
+@jwt_token
 def update_project(request, project_id):
     """
-    Update project
+    Update project - Used for RENAME
     PUT /api/projects/{project_id}/update/
     """
+    if request.method == "OPTIONS":
+        response = HttpResponse()
+        response["Access-Control-Allow-Origin"] = "http://localhost:5173"
+        response["Access-Control-Allow-Methods"] = "PUT, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response["Access-Control-Allow-Credentials"] = "true"
+        return response
+    
     try:
-        project = get_object_or_404(Project, project_id=project_id)
+        project = get_object_or_404(Project, project_id=project_id, user=request.user)
         
         # Get data from request body
         data = get_request_data(request)
@@ -131,98 +169,125 @@ def update_project(request, project_id):
         if serializer.is_valid():
             updated_project = serializer.save()
             
-            return JsonResponse({
+            response = JsonResponse({
                 'success': True,
                 'message': 'Project updated successfully',
                 'data': ProjectDescriptionSerializer(updated_project).data
             }, status=200)
+            return add_cors_headers(response)
         else:
-            return JsonResponse({
+            response = JsonResponse({
                 'success': False,
                 'error': 'Validation failed',
                 'details': serializer.errors
             }, status=400)
+            return add_cors_headers(response)
             
     except Project.DoesNotExist:
-        return JsonResponse({
+        response = JsonResponse({
             'success': False,
             'error': 'Project not found'
         }, status=404)
+        return add_cors_headers(response)
     except Exception as e:
-        return JsonResponse({
+        response = JsonResponse({
             'success': False,
             'error': str(e)
         }, status=500)
+        return add_cors_headers(response)
 
-@api_view(['DELETE'])
+@api_view(['DELETE', 'OPTIONS'])
+@jwt_token
 def delete_project(request, project_id):
     """
-    Delete project
-    DELETE /api/projects/{project_id}/delete/
+    Delete project - Debug version untuk lihat model terkait
     """
+    if request.method == "OPTIONS":
+        response = HttpResponse()
+        response["Access-Control-Allow-Origin"] = "http://localhost:5173"
+        response["Access-Control-Allow-Methods"] = "DELETE, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response["Access-Control-Allow-Credentials"] = "true"
+        return response
+    
     try:
-        project = get_object_or_404(Project, project_id=project_id)
+        project = get_object_or_404(Project, project_id=project_id, user=request.user)
         project_title = project.title
-        project.delete()
         
-        return JsonResponse({
+        print(f"🔍 DEBUG: Starting deletion of project {project_id}")
+        
+        # ✅ DEBUG: Lihat semua related models
+        from django.apps import apps
+        print("📋 All models in stories app:")
+        for model in apps.get_app_config('stories').get_models():
+            print(f"   - {model.__name__}")
+        
+        # ✅ DEBUG: Lihat specific related fields untuk Project
+        print("🔗 Project related fields:")
+        for field in project._meta.get_fields():
+            if hasattr(field, 'related_model') and field.related_model:
+                print(f"   - {field.name} -> {field.related_model.__name__}")
+        
+        # ✅ SOLUSI: Hanya delete model yang kita tahu ADA
+        known_models = ['UserStory', 'Wireframe', 'Scenario']
+        
+        for model_name in known_models:
+            try:
+                model = apps.get_model('stories', model_name)
+                if hasattr(model, 'project'):
+                    deleted_count = model.objects.filter(project=project).count()
+                    if deleted_count > 0:
+                        model.objects.filter(project=project).delete()
+                        print(f"✅ Deleted {deleted_count} records from {model_name}")
+                    else:
+                        print(f"ℹ️ No records in {model_name} for this project")
+            except Exception as e:
+                print(f"⚠️ Could not process {model_name}: {e}")
+        
+        # ✅ JANGAN COBA DELETE user_story_groups - SKIP SAJA
+        
+        # ✅ FINAL PROJECT DELETE
+        print(f"🗑️ Deleting main project...")
+        project.delete()
+        print(f"✅ Successfully deleted project {project_id}")
+        
+        response = JsonResponse({
             'success': True,
             'message': f'Project "{project_title}" deleted successfully'
         }, status=200)
+        return add_cors_headers(response)
         
     except Project.DoesNotExist:
-        return JsonResponse({
+        response = JsonResponse({
             'success': False,
             'error': 'Project not found'
         }, status=404)
+        return add_cors_headers(response)
     except Exception as e:
-        return JsonResponse({
+        print(f"❌ Critical error deleting project: {str(e)}")
+        response = JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': f'Failed to delete project: {str(e)}'
         }, status=500)
-
-@api_view(['GET'])
-def get_project_stats(request, project_id):
-    """
-    Get project statistics
-    GET /api/projects/{project_id}/stats/
-    """
-    try:
-        project = get_object_or_404(Project, project_id=project_id)
-        
-        stats = {
-            'user_stories_count': project.user_stories_count,
-            'wireframes_count': project.wireframes_count,
-            'scenarios_count': project.scenarios_count,
-            'status': project.status,
-            'created_date': project.created_date,
-            'last_modified': project.last_modified
-        }
-        
-        return JsonResponse({
-            'success': True,
-            'data': stats
-        }, status=200)
-        
-    except Project.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Project not found'
-        }, status=404)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        return add_cors_headers(response)
     
-@csrf_exempt
 @jwt_token
+@csrf_exempt
 def get_projects_history(request):
     """
-    Get all projects for the authenticated user with JWT protection
+    Get all projects for the authenticated user
     GET /api/history/projects/
     """
     try:
+        # Handle OPTIONS preflight request
+        if request.method == "OPTIONS":
+            response = HttpResponse()
+            response["Access-Control-Allow-Origin"] = "http://localhost:5173"
+            response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
+        
         # Filter projects by authenticated user (from JWT token)
         projects = Project.objects.filter(user=request.user).order_by('-created_date')
         
@@ -243,22 +308,68 @@ def get_projects_history(request):
                 'language': project.language,
                 'created_date': project.created_date,
                 'last_modified': project.last_modified,
-                'statistics': {
-                    'user_stories': user_stories_count,
-                    'wireframes': wireframes_count,
-                    'scenarios': scenarios_count
-                }
+                'user_stories_count': user_stories_count,
+                'wireframes_count': wireframes_count,
+                'scenarios_count': scenarios_count
             }
             projects_data.append(project_data)
-        
-        return JsonResponse({
+
+        response = JsonResponse({
             'success': True,
             'message': 'Projects retrieved successfully',
             'data': projects_data,
             'count': len(projects_data),
             'user': request.user.username
         })
+
+        return add_cors_headers(response)
         
+    except Exception as e:
+        print(f"Error in get_projects_history: {str(e)}")
+        response = JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+        return add_cors_headers(response)
+    
+# stories/views/project_description.py
+
+# ... kode lainnya yang sudah ada ...
+
+@api_view(['GET'])
+@jwt_token
+def get_project_stats(request, project_id):
+    """
+    Get project statistics
+    GET /api/projects/{project_id}/stats/
+    """
+    try:
+        project = get_object_or_404(Project, project_id=project_id, user=request.user)
+        
+        # Get actual counts from database
+        user_stories_count = UserStory.objects.filter(project=project).count()
+        wireframes_count = Wireframe.objects.filter(project=project).count()
+        scenarios_count = Scenario.objects.filter(project=project).count()
+        
+        stats = {
+            'user_stories_count': user_stories_count,
+            'wireframes_count': wireframes_count,
+            'scenarios_count': scenarios_count,
+            'status': project.status,
+            'created_date': project.created_date,
+            'last_modified': project.last_modified
+        }
+        
+        return JsonResponse({
+            'success': True,
+            'data': stats
+        }, status=200)
+        
+    except Project.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Project not found'
+        }, status=404)
     except Exception as e:
         return JsonResponse({
             'success': False,

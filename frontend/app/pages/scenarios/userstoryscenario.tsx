@@ -3,8 +3,8 @@ import React, { useState, useEffect } from "react";
 import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
 import { useNavigate, useParams } from "react-router-dom";
-import type { Scenario } from "../../../services/scenarioServices";
-import { scenarioService } from "../../../services/scenarioServices";
+import type { Scenario } from "../../services/scenarioServices";
+import { scenarioService } from "../../services/scenarioServices";
 
 const UserStoryScenario: React.FC = () => {
   const navigate = useNavigate();

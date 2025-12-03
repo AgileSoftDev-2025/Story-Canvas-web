@@ -1,4 +1,4 @@
-// frontend/services/scenarioServices.ts
+// app/services/scenarioServices.ts
 
 const API_BASE = 'http://127.0.0.1:8000';
 
@@ -11,49 +11,6 @@ class ApiError extends Error {
     this.status = status;
   }
 }
-
-// Utility functions for case conversion
-const caseUtils = {
-  // Convert camelCase to snake_case
-  toSnakeCase: (obj: any): any => {
-    if (obj === null || typeof obj !== 'object') return obj;
-    
-    if (Array.isArray(obj)) {
-      return obj.map(item => caseUtils.toSnakeCase(item));
-    }
-    
-    return Object.keys(obj).reduce((acc, key) => {
-      const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-      acc[snakeKey] = caseUtils.toSnakeCase(obj[key]);
-      return acc;
-    }, {} as any);
-  },
-
-  // Convert snake_case to camelCase
-  toCamelCase: (obj: any): any => {
-    if (obj === null || typeof obj !== 'object') return obj;
-    
-    if (Array.isArray(obj)) {
-      return obj.map(item => caseUtils.toCamelCase(item));
-    }
-    
-    return Object.keys(obj).reduce((acc, key) => {
-      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-      acc[camelKey] = caseUtils.toCamelCase(obj[key]);
-      return acc;
-    }, {} as any);
-  },
-
-  // Normalize API response to camelCase
-  normalizeResponse: <T>(response: any): T => {
-    return caseUtils.toCamelCase(response) as T;
-  },
-
-  // Prepare request data to snake_case
-  prepareRequest: (data: any): any => {
-    return caseUtils.toSnakeCase(data);
-  }
-};
 
 export interface Scenario {
   scenario_id: string;
@@ -145,6 +102,49 @@ export interface AcceptProjectScenarioResponse {
   error?: string;
 }
 
+// Utility functions for case conversion
+const caseUtils = {
+  // Convert camelCase to snake_case
+  toSnakeCase(obj: any): any {
+    if (obj === null || typeof obj !== 'object') return obj;
+    
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.toSnakeCase(item));
+    }
+    
+    return Object.keys(obj).reduce((acc, key) => {
+      const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+      acc[snakeKey] = this.toSnakeCase(obj[key]);
+      return acc;
+    }, {} as any);
+  },
+
+  // Convert snake_case to camelCase
+  toCamelCase(obj: any): any {
+    if (obj === null || typeof obj !== 'object') return obj;
+    
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.toCamelCase(item));
+    }
+    
+    return Object.keys(obj).reduce((acc, key) => {
+      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      acc[camelKey] = this.toCamelCase(obj[key]);
+      return acc;
+    }, {} as any);
+  },
+
+  // Normalize API response to camelCase
+  normalizeResponse<T>(response: any): T {
+    return this.toCamelCase(response) as T;
+  },
+
+  // Prepare request data to snake_case
+  prepareRequest(data: any): any {
+    return this.toSnakeCase(data);
+  }
+};
+
 export const scenarioService = {
   async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
@@ -155,96 +155,88 @@ export const scenarioService = {
     return caseUtils.normalizeResponse<T>(data);
   },
 
+  // === STORY-BASED SCENARIOS ===
+
+  async getStoryScenarios(storyId: string): Promise<ScenarioResponse> {
+    try {
+      console.log(`📡 Fetching scenarios for story: ${storyId}`);
+      const response = await fetch(`${API_BASE}/user-stories/${storyId}/scenarios/`);
+      return await this.handleResponse<ScenarioResponse>(response);
+    } catch (error) {
+      console.error('❌ Error fetching scenarios:', error);
+      throw error;
+    }
+  },
+
+  async generateScenarios(storyId: string, options: any = {}): Promise<GenerateScenarioResponse> {
+    try {
+      console.log(`🤖 Generating scenarios for story: ${storyId}`);
+      const response = await fetch(`${API_BASE}/user-stories/${storyId}/generate-scenarios/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(caseUtils.prepareRequest(options)),
+      });
+      return await this.handleResponse<GenerateScenarioResponse>(response);
+    } catch (error) {
+      console.error('❌ Error generating scenarios:', error);
+      throw error;
+    }
+  },
+
+  async acceptScenarios(storyId: string, scenarioIds: string[] = []): Promise<AcceptScenarioResponse> {
+    try {
+      console.log(`✅ Accepting scenarios for story: ${storyId}`, scenarioIds);
+      const response = await fetch(`${API_BASE}/user-stories/${storyId}/accept-scenarios/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(caseUtils.prepareRequest({ scenario_ids: scenarioIds })),
+      });
+      return await this.handleResponse<AcceptScenarioResponse>(response);
+    } catch (error) {
+      console.error('❌ Error accepting scenarios:', error);
+      throw error;
+    }
+  },
+
   // === PROJECT-BASED SCENARIOS ===
 
- async getProjectScenarios(projectId: string): Promise<ProjectScenarioResponse> {
-  try {
-    console.log(`📡 [FRONTEND] Fetching scenarios for project: ${projectId}`);
-    
-    const url = `${API_BASE}/api/projects/${projectId}/scenarios/`;
-    console.log(`📡 [FRONTEND] Full URL: ${url}`);
-    
-    const response = await fetch(url);
-    console.log(`📡 [FRONTEND] Response status: ${response.status}`);
-    console.log(`📡 [FRONTEND] Response ok: ${response.ok}`);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log(`❌ [FRONTEND] HTTP Error: ${response.status} - ${errorText}`);
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
-    }
-    
-    const rawResult = await response.json();
-    console.log("✅ [FRONTEND] Raw API Response:", rawResult);
-    
-    // Handle different response structures
-    if (rawResult.success) {
-      // Structure 1: Direct scenarios in response
-      if (rawResult.scenarios && Array.isArray(rawResult.scenarios)) {
-        console.log(`✅ [FRONTEND] Using direct scenarios structure, count: ${rawResult.scenarios.length}`);
+  async getProjectScenarios(projectId: string): Promise<ProjectScenarioResponse> {
+    try {
+      console.log(`📡 Fetching scenarios for project: ${projectId}`);
+      
+      const response = await fetch(`${API_BASE}/projects/${projectId}/scenarios/`);
+      const result = await this.handleResponse<any>(response);
+      
+      console.log("🔍 [DEBUG] Raw API Response:", result);
+      
+      // Handle nested data structure dari backend
+      if (result.success && result.data) {
         return {
           success: true,
-          scenarios: rawResult.scenarios,
-          project_title: rawResult.project_title || "Project Scenarios",
-          project_id: projectId,
-          count: rawResult.count || rawResult.scenarios.length
+          scenarios: result.data.scenarios || [],
+          project_title: result.data.project_title,
+          project_id: result.data.project_id,
+          count: result.data.count || 0
         };
       }
       
-      // Structure 2: Nested in data object
-      if (rawResult.data && rawResult.data.scenarios) {
-        console.log(`✅ [FRONTEND] Using nested data structure, count: ${rawResult.data.scenarios.length}`);
-        return {
-          success: true,
-          scenarios: rawResult.data.scenarios,
-          project_title: rawResult.data.project_title || rawResult.data.title || "Project Scenarios",
-          project_id: projectId,
-          count: rawResult.data.count || rawResult.data.scenarios.length
-        };
-      }
-      
-      // Structure 3: No scenarios found
-      console.log("ℹ️ [FRONTEND] No scenarios found in response");
-      return {
-        success: true,
-        scenarios: [],
-        project_title: rawResult.project_title || "Project Scenarios",
-        project_id: projectId,
-        count: 0
-      };
-    } else {
-      console.log(`❌ [FRONTEND] API Error: ${rawResult.error}`);
-      return {
-        success: false,
-        scenarios: [],
-        project_title: "Project Scenarios",
-        project_id: projectId,
-        count: 0,
-        error: rawResult.error || 'Failed to load scenarios'
-      };
+      // Fallback untuk struktur langsung
+      return result;
+    } catch (error) {
+      console.error('❌ Error fetching project scenarios:', error);
+      throw error;
     }
-  } catch (error) {
-    console.error('❌ [FRONTEND] Error in getProjectScenarios:', error);
-    return {
-      success: false,
-      scenarios: [],
-      project_title: "Project Scenarios",
-      project_id: projectId,
-      count: 0,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
-    };
-  }
-},
+  },
 
   async generateProjectScenarios(projectId: string, options: any = {}): Promise<GenerateProjectScenarioResponse> {
     try {
-      console.log(`🤖 [FRONTEND] Generating scenarios for project: ${projectId}`);
+      console.log(`🤖 Generating scenarios for project: ${projectId}`);
       
-      // 🔴 PERBAIKAN: TAMBAHKAN /api/
-      const url = `${API_BASE}/api/projects/${projectId}/generate-scenarios/`;
-      console.log(`🤖 [FRONTEND] Full URL: ${url}`);
-      
-      const response = await fetch(url, {
+      const response = await fetch(`${API_BASE}/projects/${projectId}/generate-scenarios/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -256,18 +248,8 @@ export const scenarioService = {
         })),
       });
       
-      console.log(`🤖 [FRONTEND] Response status: ${response.status}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log(`❌ [FRONTEND] HTTP Error: ${response.status} - ${errorText}`);
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-      
-      const rawResult = await response.json();
-      console.log("✅ [FRONTEND] Generate Response:", rawResult);
-      
-      const result = caseUtils.normalizeResponse<any>(rawResult);
+      const result = await this.handleResponse<any>(response);
+      console.log("🔍 [DEBUG] Generate Response:", result);
       
       // Handle nested data structure
       if (result.success && result.data) {
@@ -282,20 +264,16 @@ export const scenarioService = {
       
       return result;
     } catch (error) {
-      console.error('❌ [FRONTEND] Error generating project scenarios:', error);
+      console.error('❌ Error generating project scenarios:', error);
       throw error;
     }
   },
 
   async acceptProjectScenarios(projectId: string, scenarioIds: string[] = []): Promise<AcceptProjectScenarioResponse> {
     try {
-      console.log(`✅ [FRONTEND] Accepting scenarios for project: ${projectId}`, scenarioIds);
+      console.log(`✅ Accepting scenarios for project: ${projectId}`, scenarioIds);
       
-      // 🔴 PERBAIKAN: TAMBAHKAN /api/
-      const url = `${API_BASE}/api/projects/${projectId}/accept-scenarios/`;
-      console.log(`✅ [FRONTEND] Full URL: ${url}`);
-      
-      const response = await fetch(url, {
+      const response = await fetch(`${API_BASE}/projects/${projectId}/accept-scenarios/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -305,18 +283,8 @@ export const scenarioService = {
         })),
       });
       
-      console.log(`✅ [FRONTEND] Response status: ${response.status}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log(`❌ [FRONTEND] HTTP Error: ${response.status} - ${errorText}`);
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-      
-      const rawResult = await response.json();
-      console.log("✅ [FRONTEND] Accept Response:", rawResult);
-      
-      const result = caseUtils.normalizeResponse<any>(rawResult);
+      const result = await this.handleResponse<any>(response);
+      console.log("🔍 [DEBUG] Accept Response:", result);
       
       // Handle nested data structure
       if (result.success && result.data) {
@@ -331,64 +299,93 @@ export const scenarioService = {
       
       return result;
     } catch (error) {
-      console.error('❌ [FRONTEND] Error accepting project scenarios:', error);
+      console.error('❌ Error accepting project scenarios:', error);
       throw error;
     }
   },
 
-  // === STORY-BASED SCENARIOS ===
+  // === UNIVERSAL METHODS ===
 
-  async getStoryScenarios(storyId: string): Promise<ScenarioResponse> {
+  async getScenarios(resourceId: string, type: 'story' | 'project' = 'project'): Promise<ScenarioResponse | ProjectScenarioResponse> {
     try {
-      console.log(`📡 [FRONTEND] Fetching scenarios for story: ${storyId}`);
-      
-      const url = `${API_BASE}/api/user-stories/${storyId}/scenarios/`;
-      const response = await fetch(url);
-      
-      return await this.handleResponse<ScenarioResponse>(response);
+      if (type === 'story') {
+        return await this.getStoryScenarios(resourceId);
+      } else {
+        return await this.getProjectScenarios(resourceId);
+      }
     } catch (error) {
-      console.error('❌ [FRONTEND] Error fetching scenarios:', error);
+      console.error(`❌ Error fetching ${type} scenarios:`, error);
       throw error;
     }
   },
 
-  async generateScenarios(storyId: string, options: any = {}): Promise<GenerateScenarioResponse> {
+  async generateNewScenarios(resourceId: string, type: 'story' | 'project' = 'project', options: any = {}): Promise<GenerateScenarioResponse | GenerateProjectScenarioResponse> {
     try {
-      console.log(`🤖 [FRONTEND] Generating scenarios for story: ${storyId}`);
+      if (type === 'story') {
+        return await this.generateScenarios(resourceId, options);
+      } else {
+        return await this.generateProjectScenarios(resourceId, options);
+      }
+    } catch (error) {
+      console.error(`❌ Error generating ${type} scenarios:`, error);
+      throw error;
+    }
+  },
+
+  async acceptAllScenarios(resourceId: string, type: 'story' | 'project' = 'project', scenarioIds: string[] = []): Promise<AcceptScenarioResponse | AcceptProjectScenarioResponse> {
+    try {
+      if (type === 'story') {
+        return await this.acceptScenarios(resourceId, scenarioIds);
+      } else {
+        return await this.acceptProjectScenarios(resourceId, scenarioIds);
+      }
+    } catch (error) {
+      console.error(`❌ Error accepting ${type} scenarios:`, error);
+      throw error;
+    }
+  },
+
+  // === UTILITY METHODS ===
+
+  async checkScenariosExist(resourceId: string, type: 'story' | 'project' = 'project'): Promise<boolean> {
+    try {
+      const result = await this.getScenarios(resourceId, type);
+      return result.success && ((result.scenarios?.length ?? 0) > 0);
+    } catch (error) {
+      console.error(`❌ Error checking ${type} scenarios:`, error);
+      return false;
+    }
+  },
+
+  async getScenarioStatistics(resourceId: string, type: 'story' | 'project' = 'project') {
+    try {
+      const result = await this.getScenarios(resourceId, type);
+      if (!result.success) {
+        return null;
+      }
+
+      // PERBAIKAN: Gunakan nullish coalescing untuk handle undefined scenarios
+      const scenarios = result.scenarios ?? [];
       
-      const url = `${API_BASE}/api/user-stories/${storyId}/generate-scenarios/`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      return {
+        total: scenarios.length,
+        byType: {
+          main_success: scenarios.filter(s => s.scenario_type === 'main_success').length,
+          alternative: scenarios.filter(s => s.scenario_type === 'alternative').length,
+          edge_case: scenarios.filter(s => s.scenario_type === 'edge_case').length,
+          other: scenarios.filter(s => !['main_success', 'alternative', 'edge_case'].includes(s.scenario_type)).length
         },
-        body: JSON.stringify(caseUtils.prepareRequest(options)),
-      });
-      
-      return await this.handleResponse<GenerateScenarioResponse>(response);
-    } catch (error) {
-      console.error('❌ [FRONTEND] Error generating scenarios:', error);
-      throw error;
-    }
-  },
-
-  async acceptScenarios(storyId: string, scenarioIds: string[] = []): Promise<AcceptScenarioResponse> {
-    try {
-      console.log(`✅ [FRONTEND] Accepting scenarios for story: ${storyId}`, scenarioIds);
-      
-      const url = `${API_BASE}/api/user-stories/${storyId}/accept-scenarios/`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+        byStatus: {
+          draft: scenarios.filter(s => s.status === 'draft').length,
+          accepted: scenarios.filter(s => s.status === 'accepted').length,
+          rejected: scenarios.filter(s => s.status === 'rejected').length
         },
-        body: JSON.stringify(caseUtils.prepareRequest({ scenario_ids: scenarioIds })),
-      });
-      
-      return await this.handleResponse<AcceptScenarioResponse>(response);
+        withProperStructure: scenarios.filter(s => s.has_proper_structure).length,
+        enhancedWithLLM: scenarios.filter(s => s.enhanced_with_llm).length
+      };
     } catch (error) {
-      console.error('❌ [FRONTEND] Error accepting scenarios:', error);
-      throw error;
+      console.error(`❌ Error getting ${type} scenario statistics:`, error);
+      return null;
     }
   }
 };
