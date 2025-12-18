@@ -294,6 +294,11 @@ class Wireframe(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    stories_count = models.IntegerField(default=0)
+    features_count = models.IntegerField(default=0)
+    generated_with_rag = models.BooleanField(default=False, help_text="Whether this wireframe was generated using RAG")
+    is_local = models.BooleanField(default=False, help_text="Whether this wireframe was created locally (not from database)")
+    generated_at = models.DateTimeField(blank=True, null=True, help_text="When this wireframe was generated")
     
     class Meta:
         db_table = 'wireframes'

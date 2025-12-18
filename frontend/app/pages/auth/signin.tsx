@@ -3,10 +3,11 @@ import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { localStorageService } from "../../utils/localStorageService";
 
 export default function SignIn() {
   const navigate = useNavigate();
-  const { login } = useAuth(); // ✅ Gunakan login dari context
+  const { signIn } = useAuth();
   
   const [formData, setFormData] = useState({
     username: "",
@@ -14,6 +15,32 @@ export default function SignIn() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // ✅ Function to clear ALL localStorage data when signing out from scratch
+  const clearAllLocalStorageData = () => {
+    try {
+      console.log("🧹 Clearing ALL localStorage data...");
+      
+      // Save auth data temporarily (if user is currently logged in)
+      const accessToken = localStorage.getItem('access_token');
+      const refreshToken = localStorage.getItem('refresh_token');
+      const currentUser = localStorage.getItem('current_user');
+      
+      // Clear EVERYTHING
+      localStorage.clear();
+      console.log("✅ ALL localStorage cleared");
+      
+      // If we were logged in, the user is intentionally signing out
+      // So we should NOT restore auth data
+      // This ensures a clean slate when signing in fresh
+      
+      // Also clear sessionStorage for good measure
+      sessionStorage.clear();
+      
+    } catch (err) {
+      console.error("❌ Error clearing localStorage:", err);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -34,6 +61,7 @@ export default function SignIn() {
     return null;
   };
 
+  // ✅ Handle Sign In with COMPLETE localStorage clearing
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -47,59 +75,25 @@ export default function SignIn() {
     setError("");
 
     try {
-      console.log("🔄 Sending signin request...");
+      console.log("🔄 Attempting sign in...");
       
-      const response = await fetch("http://127.0.0.1:8000/api/auth/signin/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username: formData.username,
-          password: formData.password,
-        }),
-      });
-
-      console.log("📨 Response status:", response.status);
+      // ✅ Clear ALL localStorage before sign in (fresh start)
+      clearAllLocalStorageData();
       
-      const contentType = response.headers.get("content-type");
-      console.log("📨 Content-Type:", contentType);
+      // ✅ Use the signIn method from AuthContext
+      const result = await signIn(formData.username, formData.password);
       
-      let data;
-      if (contentType && contentType.includes("application/json")) {
-        data = await response.json();
-        console.log("📨 Response data:", data);
-      } else {
-        const text = await response.text();
-        console.log("📨 Raw text response:", text);
-        setError("Server returned non-JSON response");
-        return;
-      }
-
-      // ✅ Handle response dengan auth context
-      if (response.ok && data.success) {
+      if (result.success) {
         console.log("✅ Login successful!");
-        
-        // ✅ Gunakan login function dari context
-        login(data.tokens, data.user);
-        
-        console.log("💾 Data saved via AuthContext");
         console.log("🔄 Redirecting to home...");
-        
         navigate("/");
       } else {
-        console.log("❌ Login failed");
-        let errorMessage = "Login failed";
-        if (data.error) {
-          errorMessage = data.error;
-        } else if (data.errors) {
-          errorMessage = Object.values(data.errors).flat().join(', ');
-        }
-        setError(errorMessage);
+        console.log("❌ Login failed:", result.error);
+        setError(result.error || "Login failed");
       }
     } catch (err) {
-      console.error("🚨 SignIn network error:", err);
-      setError("Network error. Please check if server is running.");
+      console.error("🚨 SignIn error:", err);
+      setError("An unexpected error occurred");
     } finally {
       setLoading(false);
     }

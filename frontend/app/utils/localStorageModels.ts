@@ -102,6 +102,8 @@ export interface LocalScenario {
   
   enhanced_with_llm: boolean;
   status: 'draft' | 'reviewed' | 'approved' | 'tested';
+  is_local?: boolean; // Add this line - mark if scenario is from local storage
+
   
   // Timestamps
   created_at: string;
@@ -109,6 +111,7 @@ export interface LocalScenario {
 }
 
 // Additional interfaces for session and history tracking
+// Update your LocalSession interface in localStorageModels.ts:
 export interface LocalSession {
   session_id: string;
   project_id: string;
@@ -116,6 +119,9 @@ export interface LocalSession {
   wireframes_generated: number;
   generated_at: string;
   is_local?: boolean;
+  scenarios_generated?: number;
+  generated_by?: string;
+  method?: 'api' | 'fallback';
 }
 
 export interface LocalHistory {

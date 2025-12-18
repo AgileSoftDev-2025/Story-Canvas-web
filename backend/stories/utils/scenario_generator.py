@@ -13,8 +13,24 @@ class ScenarioGenerator:
         self.model_id = getattr(settings, 'MODEL_ID', 'ibm-granite/granite-3.3-8b-instruct')
     
     def generate_comprehensive_scenarios(self, user_story, html_content=None, scenario_types=None):
-        """Main function to generate scenarios - EXACT SAME AS COLAB"""
-        print(f"🧠 Generating comprehensive scenarios for: {user_story.role} - {user_story.action}")
+        """Main function to generate scenarios - SIMPLIFIED VERSION"""
+        # Check if user_story is a dictionary
+        if isinstance(user_story, dict):
+            # Handle dictionary input
+            role = user_story.get('role', 'User')
+            action = user_story.get('action', '')
+            story_text = user_story.get('story_text', '') or user_story.get('text', '')
+            print(f"🧠 Generating comprehensive scenarios for DICT: {role} - {action}")
+        else:
+            # Handle object input (backward compatibility)
+            try:
+                role = user_story.role
+                action = user_story.action
+                story_text = getattr(user_story, 'story_text', '') or getattr(user_story, 'text', '')
+                print(f"🧠 Generating comprehensive scenarios for OBJECT: {role} - {action}")
+            except AttributeError as e:
+                print(f"❌ Error accessing user story attributes: {e}")
+                return []
         
         # Parse user story to get components
         actor, action, goal = self.parse_user_story(user_story)
@@ -23,7 +39,10 @@ class ScenarioGenerator:
             print("❌ Could not parse user story action")
             return []
         
-        # Detect domain and needed scenario types
+        # Don't clean the text - just use as is
+        print(f"   Parsed: Actor='{actor}', Action='{action}', Goal='{goal}'")
+        
+        # Detect domain
         domain = self.infer_domain_from_content(action, goal, actor)
         print(f"   Detected Domain: {domain}")
         
@@ -40,7 +59,7 @@ class ScenarioGenerator:
         
         print(f"   Needed Scenario Types: {', '.join(needed_types)}")
         
-        # Generate scenarios
+        # Use your existing scenario generation methods (they should still work)
         scenarios = self._generate_scenarios_by_type(
             actor, action, goal, domain, ui_elements, needed_types
         )
@@ -48,7 +67,7 @@ class ScenarioGenerator:
         # Validate and complete scenarios
         validated_scenarios = self.validate_and_complete_scenarios(scenarios)
         
-        # LLM enhancement for natural language
+        # LLM enhancement
         try:
             enhanced_scenarios = self.enhance_scenarios_with_llm(
                 actor, action, goal, validated_scenarios, domain, html_content, needed_types

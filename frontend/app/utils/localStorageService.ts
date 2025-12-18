@@ -1,10 +1,11 @@
-// frontend/src/utils/localStorageService.ts
+// frontend/app/utils/localStorageService.ts
 import type {
   LocalUser,
   LocalProject,
   LocalUserStory,
   LocalWireframe,
-  LocalScenario
+  LocalScenario,
+  LocalSession
 } from './localStorageModels';
 
 const generateShortUUID = (): string => {
@@ -15,6 +16,9 @@ const getCurrentTimestamp = (): string => {
   return new Date().toISOString();
 };
 
+// Add this constant at the top
+const USER_STORIES_KEY = 'local_user_stories';
+
 export class LocalStorageService {
   private static instance: LocalStorageService;
   
@@ -24,6 +28,8 @@ export class LocalStorageService {
     USER_STORIES: 'local_user_stories',
     WIREFRAMES: 'local_wireframes',
     SCENARIOS: 'local_scenarios',
+    SCENARIOS_BY_PROJECT: (projectId: string) => `scenarios_${projectId}`,
+    SESSIONS_BY_PROJECT: (projectId: string) => `sessions_${projectId}`,
   };
 
   private constructor() {
@@ -36,74 +42,88 @@ export class LocalStorageService {
     }
     return LocalStorageService.instance;
   }
-  
-  // ===== PROJECT OPERATIONS =====
-// Add this method to your LocalStorageService class
-saveProject(projectData: Omit<LocalProject, 'project_id' | 'created_at' | 'updated_at'> & { 
-  project_id?: string 
-}): LocalProject {
-  console.log('💾 Saving project:', projectData);
-  
-  try {
-    // If project_id exists, it's an update
-    if (projectData.project_id) {
-      const { project_id, ...updates } = projectData;
-      const updatedProject = this.updateProject(project_id, updates);
-      if (!updatedProject) {
-        throw new Error(`Project with ID ${project_id} not found`);
-      }
-      return updatedProject;
-    } 
-    // Otherwise, it's a create
-    else {
-      // Remove any optional fields that shouldn't be in create
-      const { is_guest_project, user_specific, ...createData } = projectData;
-      return this.createProject(createData);
-    }
-  } catch (error) {
-    console.error('❌ Error saving project:', error);
-    throw error;
-  }
-}
 
-  // ===== USER OPERATIONS =====
-  setCurrentUser(user: Omit<LocalUser, 'id' | 'created_at' | 'updated_at'>): LocalUser {
-    console.log('👤 Setting current user:', user.username);
-    const userData: LocalUser = {
-      ...user,
-      id: generateShortUUID(),
-      created_at: getCurrentTimestamp(),
-      updated_at: getCurrentTimestamp(),
-    };
-    
+  // ===== USER METHODS =====
+  
+  setCurrentUser(userData: { username: string; email: string; is_active: boolean; last_login: string }): void {
     try {
-      localStorage.setItem(this.KEYS.CURRENT_USER, JSON.stringify(userData));
-      console.log('✅ User saved to localStorage:', userData);
-      return userData;
+      const user: LocalUser = {
+        id: generateShortUUID(),
+        username: userData.username,
+        email: userData.email,
+        is_active: userData.is_active,
+        last_login: userData.last_login,
+        created_at: getCurrentTimestamp(),
+        updated_at: getCurrentTimestamp(),
+      };
+      
+      localStorage.setItem(this.KEYS.CURRENT_USER, JSON.stringify(user));
+      console.log('👤 User data saved:', user.username);
     } catch (error) {
-      console.error('❌ Error saving user to localStorage:', error);
+      console.error('❌ Error saving user data:', error);
       throw error;
     }
   }
 
+  clearCurrentUser(): void {
+    try {
+      localStorage.removeItem(this.KEYS.CURRENT_USER);
+      console.log('👤 User data cleared');
+    } catch (error) {
+      console.error('❌ Error clearing user data:', error);
+    }
+  }
+
+  initializeDefaultUser(): LocalUser {
+    const user: LocalUser = {
+      id: 'guest_' + generateShortUUID(),
+      username: 'guest',
+      email: 'guest@example.com',
+      is_active: true,
+      last_login: getCurrentTimestamp(),
+      created_at: getCurrentTimestamp(),
+      updated_at: getCurrentTimestamp(),
+    };
+    
+    localStorage.setItem(this.KEYS.CURRENT_USER, JSON.stringify(user));
+    console.log('👤 Created default guest user:', user.username);
+    return user;
+  }
+  
+  getOrCreateUser(): LocalUser {
+    try {
+      const userStr = localStorage.getItem(this.KEYS.CURRENT_USER);
+      
+      if (!userStr) {
+        return this.initializeDefaultUser();
+      }
+      
+      const user = JSON.parse(userStr) as LocalUser;
+      console.log('👤 Retrieved existing user:', user.username);
+      return user;
+    } catch (error) {
+      console.error('Error getting/creating user:', error);
+      return this.initializeDefaultUser();
+    }
+  }
+  
   getCurrentUser(): LocalUser | null {
     try {
       const userStr = localStorage.getItem(this.KEYS.CURRENT_USER);
-      const user = userStr ? JSON.parse(userStr) : null;
-      console.log('👤 Retrieved current user:', user);
+      
+      if (!userStr) {
+        return null;
+      }
+      
+      const user = JSON.parse(userStr) as LocalUser;
       return user;
     } catch (error) {
-      console.error('❌ Error getting user from localStorage:', error);
+      console.error('Error getting current user:', error);
       return null;
     }
   }
 
-  clearCurrentUser(): void {
-    localStorage.removeItem(this.KEYS.CURRENT_USER);
-    console.log('✅ Current user cleared from localStorage');
-  }
-
-  // ===== PROJECT OPERATIONS =====
+  // ===== PROJECT METHODS =====
   createProject(projectData: Omit<LocalProject, 'project_id' | 'created_at' | 'updated_at'>): LocalProject {
     console.log('📝 Creating project with data:', projectData);
     
@@ -116,17 +136,10 @@ saveProject(projectData: Omit<LocalProject, 'project_id' | 'created_at' | 'updat
         updated_at: getCurrentTimestamp(),
       };
       
-      console.log('📦 New project to save:', project);
-      
       projects.push(project);
       localStorage.setItem(this.KEYS.PROJECTS, JSON.stringify(projects));
       
-      console.log('✅ Project saved. Total projects:', projects.length);
-      
-      // Verify the save worked
-      const verifyProjects = this.getAllProjects();
-      console.log('📋 Projects in localStorage after save:', verifyProjects.length);
-      
+      console.log('✅ Project saved:', project.project_id);
       return project;
     } catch (error) {
       console.error('❌ Error creating project:', error);
@@ -134,63 +147,51 @@ saveProject(projectData: Omit<LocalProject, 'project_id' | 'created_at' | 'updat
     }
   }
 
+  // FIXED: Method untuk create project dengan ID yang sudah ditentukan
+  createProjectWithId(projectData: Omit<LocalProject, 'created_at' | 'updated_at'>): LocalProject {
+    try {
+      const project: LocalProject = {
+        ...projectData,
+        created_at: getCurrentTimestamp(),
+        updated_at: getCurrentTimestamp()
+      };
+
+      const projects = this.getAllProjects();
+      projects.push(project);
+      localStorage.setItem(this.KEYS.PROJECTS, JSON.stringify(projects));
+      
+      console.log(`✅ Created project with ID: ${project.project_id}`);
+      return project;
+    } catch (error) {
+      console.error('Error creating project with ID:', error);
+      throw error;
+    }
+  }
+
   getProject(projectId: string): LocalProject | null {
-  try {
-    const projects = this.getAllProjects();
-    const project = projects.find(p => p.project_id === projectId) || null;
-    
-    // Don't return user projects from localStorage
-    if (project && project.user_specific) {
-      console.log(`🔒 Project ${projectId} is user-specific, not returning from localStorage`);
+    try {
+      const projects = this.getAllProjects();
+      const project = projects.find(p => p.project_id === projectId) || null;
+      
+      console.log(`🔍 Getting project ${projectId}:`, project ? 'Found' : 'Not found');
+      return project;
+    } catch (error) {
+      console.error('❌ Error getting project:', error);
       return null;
     }
-    
-    console.log(`🔍 Getting project ${projectId}:`, project ? 'Found' : 'Not found');
-    return project;
-  } catch (error) {
-    console.error('❌ Error getting project:', error);
-    return null;
   }
-}
-
-
 
   getAllProjects(): LocalProject[] {
-  try {
-    const projectsStr = localStorage.getItem(this.KEYS.PROJECTS);
-    const projects = projectsStr ? JSON.parse(projectsStr) : [];
-    
-    // Filter out user projects (they should come from API)
-    const guestProjects = projects.filter((p: LocalProject) => !p.user_specific);
-    
-    console.log(`📚 Retrieved ${guestProjects.length} guest projects from localStorage`);
-    return guestProjects;
-  } catch (error) {
-    console.error('❌ Error getting all projects:', error);
-    return [];
-  }
-}
-
-deleteUserStory(storyId: string): boolean {
-  try {
-    const stories = this.getAllUserStories();
-    const storyIndex = stories.findIndex(s => s.story_id === storyId);
-    
-    if (storyIndex === -1) {
-      console.log('❌ User story not found for deletion:', storyId);
-      return false;
+    try {
+      const projectsStr = localStorage.getItem(this.KEYS.PROJECTS);
+      const projects = projectsStr ? JSON.parse(projectsStr) : [];
+      console.log(`📚 Retrieved ${projects.length} projects from localStorage`);
+      return projects;
+    } catch (error) {
+      console.error('❌ Error getting all projects:', error);
+      return [];
     }
-    
-    stories.splice(storyIndex, 1);
-    localStorage.setItem(this.KEYS.USER_STORIES, JSON.stringify(stories));
-    
-    console.log('✅ User story deleted:', storyId);
-    return true;
-  } catch (error) {
-    console.error('❌ Error deleting user story:', error);
-    return false;
   }
-}
 
   updateProject(projectId: string, updates: Partial<LocalProject>): LocalProject | null {
     try {
@@ -245,25 +246,48 @@ deleteUserStory(storyId: string): boolean {
     }
   }
 
-  // ===== USER STORY OPERATIONS =====
-  createUserStory(storyData: Omit<LocalUserStory, 'story_id' | 'created_at' | 'updated_at'>): LocalUserStory {
+  // ===== USER STORY METHODS =====
+  
+  // FIXED: Method untuk mendapatkan semua stories
+  getStories(): LocalUserStory[] {
     try {
-      const stories = this.getAllUserStories();
-      const story: LocalUserStory = {
-        ...storyData,
-        story_id: generateShortUUID(),
-        created_at: getCurrentTimestamp(),
-        updated_at: getCurrentTimestamp(),
-      };
-      
-      stories.push(story);
-      localStorage.setItem(this.KEYS.USER_STORIES, JSON.stringify(stories));
-      console.log('✅ User story created:', story.story_id);
-      return story;
+      const storiesStr = localStorage.getItem(this.KEYS.USER_STORIES);
+      return storiesStr ? JSON.parse(storiesStr) : [];
     } catch (error) {
-      console.error('❌ Error creating user story:', error);
+      console.error('Error getting stories:', error);
+      return [];
+    }
+  }
+
+  // FIXED: Method untuk create user story dengan custom ID
+  createUserStory(storyData: Omit<LocalUserStory, 'story_id' | 'created_at' | 'updated_at'>, customId?: string): LocalUserStory {
+    try {
+      const storyId = customId || this.generateStoryId();
+      
+      const newStory: LocalUserStory = {
+        ...storyData,
+        story_id: storyId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const stories = this.getStories();
+      stories.push(newStory);
+      localStorage.setItem(this.KEYS.USER_STORIES, JSON.stringify(stories));
+      
+      console.log(`📝 Created story ${storyId} for project ${storyData.project_id}`);
+      return newStory;
+    } catch (error) {
+      console.error('Error creating user story:', error);
       throw error;
     }
+  }
+
+  // Helper untuk generate story ID
+  private generateStoryId(): string {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000);
+    return `US_${timestamp}_${random}`;
   }
 
   getUserStoriesByProject(projectId: string): LocalUserStory[] {
@@ -276,22 +300,81 @@ deleteUserStory(storyId: string): boolean {
   getAllUserStories(): LocalUserStory[] {
     try {
       const storiesStr = localStorage.getItem(this.KEYS.USER_STORIES);
-      return storiesStr ? JSON.parse(storiesStr) : [];
+      const stories = storiesStr ? JSON.parse(storiesStr) : [];
+      console.log(`📋 Total user stories in localStorage: ${stories.length}`);
+      return stories;
     } catch (error) {
       console.error('❌ Error getting user stories:', error);
       return [];
     }
   }
 
-  private deleteProjectUserStories(projectId: string): void {
-    const stories = this.getAllUserStories();
-    const filteredStories = stories.filter(s => s.project_id !== projectId);
-    localStorage.setItem(this.KEYS.USER_STORIES, JSON.stringify(filteredStories));
-    console.log(`🗑️ Deleted user stories for project ${projectId}`);
+  updateUserStory(storyId: string, updates: Partial<LocalUserStory>): LocalUserStory | null {
+    try {
+      const stories = this.getAllUserStories();
+      const storyIndex = stories.findIndex(s => s.story_id === storyId);
+      
+      if (storyIndex === -1) {
+        console.log('❌ User story not found for update:', storyId);
+        return null;
+      }
+      
+      const updatedStory: LocalUserStory = {
+        ...stories[storyIndex],
+        ...updates,
+        updated_at: getCurrentTimestamp(),
+      };
+      
+      stories[storyIndex] = updatedStory;
+      localStorage.setItem(this.KEYS.USER_STORIES, JSON.stringify(stories));
+      
+      console.log('✅ User story updated:', storyId);
+      return updatedStory;
+    } catch (error) {
+      console.error('❌ Error updating user story:', error);
+      return null;
+    }
   }
 
-  // ===== WIREFRAME OPERATIONS =====
-  createWireframe(wireframeData: Omit<LocalWireframe, 'wireframe_id' | 'created_at' | 'updated_at'>): LocalWireframe {
+  deleteUserStory(storyId: string): boolean {
+    try {
+      const stories = this.getAllUserStories();
+      const storyIndex = stories.findIndex(s => s.story_id === storyId);
+      
+      if (storyIndex === -1) {
+        console.log('❌ User story not found for deletion:', storyId);
+        return false;
+      }
+      
+      stories.splice(storyIndex, 1);
+      localStorage.setItem(this.KEYS.USER_STORIES, JSON.stringify(stories));
+      
+      console.log('✅ User story deleted:', storyId);
+      return true;
+    } catch (error) {
+      console.error('❌ Error deleting user story:', error);
+      return false;
+    }
+  }
+
+  // FIXED: Method untuk clear semua stories dari project
+  clearProjectStories(projectId: string): void {
+    try {
+      const stories = this.getAllUserStories();
+      const filteredStories = stories.filter(s => s.project_id !== projectId);
+      localStorage.setItem(this.KEYS.USER_STORIES, JSON.stringify(filteredStories));
+      console.log(`🧹 Cleared stories for project ${projectId}`);
+    } catch (error) {
+      console.error('Error clearing project stories:', error);
+    }
+  }
+
+  private deleteProjectUserStories(projectId: string): void {
+    this.clearProjectStories(projectId);
+  }
+
+  // ===== WIREFRAME METHODS =====
+  createWireframe(wireframeData: Omit<LocalWireframe, 'wireframe_id' | 'created_at' | 'updated_at'>, wireframe_id: any): LocalWireframe {
     try {
       const wireframes = this.getAllWireframes();
       const wireframe: LocalWireframe = {
@@ -332,30 +415,91 @@ deleteUserStory(storyId: string): boolean {
     localStorage.setItem(this.KEYS.WIREFRAMES, JSON.stringify(filteredWireframes));
   }
 
-  // ===== SCENARIO OPERATIONS =====
-  createScenario(scenarioData: Omit<LocalScenario, 'scenario_id' | 'created_at' | 'updated_at'>): LocalScenario {
+  // ===== SCENARIO METHODS =====
+  createScenario(scenarioData: Omit<LocalScenario, 'scenario_id' | 'created_at' | 'updated_at'>, scenarioId?: string): LocalScenario {
+  try {
+    const scenario: LocalScenario = {
+      ...scenarioData,
+      scenario_id: scenarioId || `scenario_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const scenarios = this.getAllScenarios();
+    scenarios.push(scenario);
+    localStorage.setItem('local_scenarios', JSON.stringify(scenarios));
+    
+    return scenario;
+  } catch (error) {
+    console.error('Error creating scenario:', error);
+    throw error;
+  }
+}
+
+  updateScenario(scenarioId: string, updates: Partial<LocalScenario>): boolean {
     try {
-      const scenarios = this.getAllScenarios();
-      const scenario: LocalScenario = {
-        ...scenarioData,
-        scenario_id: generateShortUUID(),
-        created_at: getCurrentTimestamp(),
+      // Update in main storage
+      const allScenarios = this.getAllScenarios();
+      const scenarioIndex = allScenarios.findIndex(s => s.scenario_id === scenarioId);
+      
+      if (scenarioIndex === -1) {
+        console.warn(`❌ Scenario ${scenarioId} not found in main storage`);
+        return false;
+      }
+      
+      allScenarios[scenarioIndex] = {
+        ...allScenarios[scenarioIndex],
+        ...updates,
         updated_at: getCurrentTimestamp(),
       };
       
-      scenarios.push(scenario);
-      localStorage.setItem(this.KEYS.SCENARIOS, JSON.stringify(scenarios));
-      console.log('✅ Scenario created:', scenario.scenario_id);
-      return scenario;
+      localStorage.setItem(this.KEYS.SCENARIOS, JSON.stringify(allScenarios));
+      console.log(`✅ Updated scenario ${scenarioId} in main storage`);
+      
+      // Also update in project-specific storage
+      const projectId = allScenarios[scenarioIndex].project_id;
+      const projectScenarios = this.getScenariosByProject(projectId);
+      const projectIndex = projectScenarios.findIndex(s => s.scenario_id === scenarioId);
+      
+      if (projectIndex !== -1) {
+        projectScenarios[projectIndex] = {
+          ...projectScenarios[projectIndex],
+          ...updates,
+          updated_at: getCurrentTimestamp(),
+        };
+        
+        this.saveScenariosToProject(projectId, projectScenarios);
+        console.log(`✅ Updated scenario ${scenarioId} in project storage`);
+      }
+      
+      return true;
     } catch (error) {
-      console.error('❌ Error creating scenario:', error);
-      throw error;
+      console.error('Error updating scenario:', error);
+      return false;
     }
   }
 
   getScenariosByProject(projectId: string): LocalScenario[] {
-    const scenarios = this.getAllScenarios();
-    return scenarios.filter(s => s.project_id === projectId);
+    try {
+      // First try project-specific storage
+      const projectKey = this.KEYS.SCENARIOS_BY_PROJECT(projectId);
+      const scenariosStr = localStorage.getItem(projectKey);
+      
+      if (scenariosStr) {
+        const scenarios = JSON.parse(scenariosStr);
+        console.log(`📋 Found ${scenarios.length} scenarios in project storage for ${projectId}`);
+        return scenarios;
+      }
+      
+      // Fallback: filter from main storage
+      const allScenarios = this.getAllScenarios();
+      const filtered = allScenarios.filter(s => s.project_id === projectId);
+      console.log(`📋 Found ${filtered.length} scenarios for project ${projectId} (from main storage)`);
+      return filtered;
+    } catch (error) {
+      console.error('❌ Error getting scenarios by project:', error);
+      return [];
+    }
   }
 
   getAllScenarios(): LocalScenario[] {
@@ -363,15 +507,77 @@ deleteUserStory(storyId: string): boolean {
       const scenariosStr = localStorage.getItem(this.KEYS.SCENARIOS);
       return scenariosStr ? JSON.parse(scenariosStr) : [];
     } catch (error) {
-      console.error('❌ Error getting scenarios:', error);
+      console.error('❌ Error getting all scenarios:', error);
+      return [];
+    }
+  }
+
+  // Method to save scenarios directly to project storage
+  saveScenariosToProject(projectId: string, scenarios: LocalScenario[]): void {
+    try {
+      const projectKey = this.KEYS.SCENARIOS_BY_PROJECT(projectId);
+      localStorage.setItem(projectKey, JSON.stringify(scenarios));
+      console.log(`✅ Saved ${scenarios.length} scenarios to project storage: ${projectKey}`);
+      
+      // Also update main storage
+      const allScenarios = this.getAllScenarios();
+      const newScenarios = scenarios.filter(scenario => 
+        !allScenarios.some(s => s.scenario_id === scenario.scenario_id)
+      );
+      
+      if (newScenarios.length > 0) {
+        allScenarios.push(...newScenarios);
+        localStorage.setItem(this.KEYS.SCENARIOS, JSON.stringify(allScenarios));
+        console.log(`✅ Also added ${newScenarios.length} new scenarios to main storage`);
+      }
+    } catch (error) {
+      console.error('Error saving scenarios to project:', error);
+    }
+  }
+
+  // Method to save session data for a project
+  saveSessionData(projectId: string, sessionData: any): void {
+    try {
+      const projectKey = this.KEYS.SESSIONS_BY_PROJECT(projectId);
+      const existingSessions = JSON.parse(localStorage.getItem(projectKey) || '[]');
+      existingSessions.push(sessionData);
+      localStorage.setItem(projectKey, JSON.stringify(existingSessions));
+      console.log(`✅ Saved session data for project ${projectId}`);
+    } catch (error) {
+      console.error('Error saving session data:', error);
+    }
+  }
+
+  // Method to get session data for a project
+  getSessionData(projectId: string): any[] {
+    try {
+      const projectKey = this.KEYS.SESSIONS_BY_PROJECT(projectId);
+      return JSON.parse(localStorage.getItem(projectKey) || '[]');
+    } catch (error) {
+      console.error('Error getting session data:', error);
       return [];
     }
   }
 
   private deleteProjectScenarios(projectId: string): void {
-    const scenarios = this.getAllScenarios();
-    const filteredScenarios = scenarios.filter(s => s.project_id !== projectId);
-    localStorage.setItem(this.KEYS.SCENARIOS, JSON.stringify(filteredScenarios));
+    try {
+      // Delete from main storage
+      const allScenarios = this.getAllScenarios();
+      const filtered = allScenarios.filter(s => s.project_id !== projectId);
+      localStorage.setItem(this.KEYS.SCENARIOS, JSON.stringify(filtered));
+      
+      // Delete project-specific storage
+      const projectKey = this.KEYS.SCENARIOS_BY_PROJECT(projectId);
+      localStorage.removeItem(projectKey);
+      
+      // Delete session data
+      const sessionKey = this.KEYS.SESSIONS_BY_PROJECT(projectId);
+      localStorage.removeItem(sessionKey);
+      
+      console.log(`🗑️ Deleted all scenarios and sessions for project ${projectId}`);
+    } catch (error) {
+      console.error('Error deleting project scenarios:', error);
+    }
   }
 
   // ===== STATISTICS =====
@@ -385,22 +591,55 @@ deleteUserStory(storyId: string): boolean {
     return stats;
   }
 
-  // ===== CLEANUP =====
-  clearAllData(): void {
-    Object.values(this.KEYS).forEach(key => {
-      localStorage.removeItem(key);
-    });
-    console.log('🧹 All localStorage data cleared');
-  }
-
   // ===== DEBUG METHODS =====
   debugStorage(): void {
     console.log('=== 🐛 LOCALSTORAGE DEBUG ===');
-    Object.keys(this.KEYS).forEach(key => {
-      const value = localStorage.getItem(this.KEYS[key as keyof typeof this.KEYS]);
-      console.log(`Key: ${key}`, value ? JSON.parse(value) : 'Empty');
+    
+    // Show all defined keys
+    console.log('Defined storage keys:');
+    console.log('- Current User:', localStorage.getItem(this.KEYS.CURRENT_USER) ? '✅' : '❌');
+    console.log('- Projects:', localStorage.getItem(this.KEYS.PROJECTS) ? `${JSON.parse(localStorage.getItem(this.KEYS.PROJECTS) || '[]').length} items` : '❌');
+    console.log('- User Stories:', localStorage.getItem(this.KEYS.USER_STORIES) ? `${JSON.parse(localStorage.getItem(this.KEYS.USER_STORIES) || '[]').length} items` : '❌');
+    console.log('- Wireframes:', localStorage.getItem(this.KEYS.WIREFRAMES) ? `${JSON.parse(localStorage.getItem(this.KEYS.WIREFRAMES) || '[]').length} items` : '❌');
+    console.log('- Scenarios:', localStorage.getItem(this.KEYS.SCENARIOS) ? `${JSON.parse(localStorage.getItem(this.KEYS.SCENARIOS) || '[]').length} items` : '❌');
+    
+    // Show all scenario-related keys
+    console.log('\nAll scenario-related keys in localStorage:');
+    const allKeys = Object.keys(localStorage);
+    const scenarioKeys = allKeys.filter(key => key.includes('scenario') || key.includes('Scenario'));
+    scenarioKeys.forEach(key => {
+      try {
+        const data = JSON.parse(localStorage.getItem(key) || '[]');
+        console.log(`- ${key}: ${Array.isArray(data) ? data.length : 1} items`);
+      } catch {
+        console.log(`- ${key}: [Non-JSON data]`);
+      }
     });
+    
     console.log('=== DEBUG END ===');
+  }
+
+  clearAllData(): void {
+    try {
+      // Clear all keys
+      localStorage.removeItem(this.KEYS.CURRENT_USER);
+      localStorage.removeItem(this.KEYS.PROJECTS);
+      localStorage.removeItem(this.KEYS.USER_STORIES);
+      localStorage.removeItem(this.KEYS.WIREFRAMES);
+      localStorage.removeItem(this.KEYS.SCENARIOS);
+      
+      // Clear all dynamic keys
+      const allKeys = Object.keys(localStorage);
+      allKeys.forEach(key => {
+        if (key.startsWith('scenarios_') || key.startsWith('sessions_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      console.log('🧹 All localStorage data cleared');
+    } catch (error) {
+      console.error('Error clearing all data:', error);
+    }
   }
 }
 
