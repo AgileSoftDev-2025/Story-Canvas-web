@@ -3,10 +3,11 @@ import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { localStorageService } from "../../utils/localStorageService";
 
 export default function SignUp() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { signUp } = useAuth();
   
   const [formData, setFormData] = useState({
     email: "",
@@ -16,19 +17,45 @@ export default function SignUp() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({
     email: "",
     username: "",
     password: ""
   });
-  const [touchedFields, setTouchedFields] = useState({
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({
     email: false,
     username: false,
     password: false,
     passwordConfirmation: false
   });
 
-  // ✅ Password validation rules - return array of errors
+  // ✅ Function to clear ALL localStorage data when signing out from scratch
+  const clearAllLocalStorageData = () => {
+    try {
+      console.log("🧹 Clearing ALL localStorage data...");
+      
+      // Save auth data temporarily (if user is currently logged in)
+      const accessToken = localStorage.getItem('access_token');
+      const refreshToken = localStorage.getItem('refresh_token');
+      const currentUser = localStorage.getItem('current_user');
+      
+      // Clear EVERYTHING
+      localStorage.clear();
+      console.log("✅ ALL localStorage cleared");
+      
+      // If we were logged in, the user is intentionally signing out
+      // So we should NOT restore auth data
+      // This ensures a clean slate when signing in fresh
+      
+      // Also clear sessionStorage for good measure
+      sessionStorage.clear();
+      
+    } catch (err) {
+      console.error("❌ Error clearing localStorage:", err);
+    }
+  };
+
+  // ✅ Password validation rules
   const validatePassword = (password: string) => {
     const errors: string[] = [];
 
@@ -61,7 +88,7 @@ export default function SignUp() {
     
     // Clear errors when user starts typing
     if (error) setError("");
-    if (fieldErrors[name as keyof typeof fieldErrors]) {
+    if (fieldErrors[name]) {
       setFieldErrors(prev => ({
         ...prev,
         [name]: ""
@@ -69,7 +96,7 @@ export default function SignUp() {
     }
   };
 
-  // ✅ Handle field blur (when user leaves the field)
+  // ✅ Handle field blur
   const handleFieldBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name } = e.target;
     setTouchedFields(prev => ({
@@ -77,7 +104,6 @@ export default function SignUp() {
       [name]: true
     }));
 
-    // Validate the field that was just blurred
     validateField(name, formData[name as keyof typeof formData]);
   };
 
@@ -111,28 +137,10 @@ export default function SignUp() {
       } else {
         const passwordErrors = validatePassword(value);
         if (passwordErrors.length > 0) {
-          // ✅ Combine multiple password errors
           if (passwordErrors.length === 1) {
             errors.password = passwordErrors[0];
           } else {
-            // Group similar errors
-            const numberError = passwordErrors.find(err => err.includes('number'));
-            const symbolError = passwordErrors.find(err => err.includes('symbol'));
-            const lowercaseError = passwordErrors.find(err => err.includes('lowercase'));
-            const uppercaseError = passwordErrors.find(err => err.includes('uppercase'));
-            const lengthError = passwordErrors.find(err => err.includes('8 characters'));
-
-            // Create combined messages
-            const combinedErrors = [];
-            if (numberError && symbolError) {
-              combinedErrors.push("Password must contain at least one number and one symbol");
-            } else if (lowercaseError && uppercaseError) {
-              combinedErrors.push("Password must contain at least one lowercase and one uppercase letter");
-            } else {
-              // Show up to 2 specific errors
-              combinedErrors.push(...passwordErrors.slice(0, 2));
-            }
-
+            const combinedErrors = passwordErrors.slice(0, 2);
             errors.password = combinedErrors.join(', ');
           }
         } else {
@@ -141,95 +149,46 @@ export default function SignUp() {
       }
     }
 
-    if (fieldName === 'passwordConfirmation') {
-      // This will be handled in the main validation
-    }
-
     setFieldErrors(errors);
   };
 
-  // ✅ Validasi form untuk submit
-  const validateForm = () => {
-    const errors = {
-      email: "",
-      username: "",
-      password: ""
-    };
+  // ✅ Validate form untuk submit
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
 
     if (!formData.email) {
-      errors.email = "Email is required";
+      newErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      errors.email = "Please enter a valid email address";
+      newErrors.email = "Please enter a valid email address";
     }
 
     if (!formData.username) {
-      errors.username = "Username is required";
+      newErrors.username = "Username is required";
     } else if (formData.username.length < 3) {
-      errors.username = "Username must be at least 3 characters long";
+      newErrors.username = "Username must be at least 3 characters long";
     }
 
-    // ✅ Enhanced password validation
     if (!formData.password) {
-      errors.password = "Password is required";
+      newErrors.password = "Password is required";
     } else {
       const passwordErrors = validatePassword(formData.password);
       if (passwordErrors.length > 0) {
-        // Combine multiple errors for form submission
         if (passwordErrors.length > 1) {
-          errors.password = `Password requirements not met: ${passwordErrors.slice(0, 2).join(', ')}`;
+          newErrors.password = `Password requirements not met: ${passwordErrors.slice(0, 2).join(', ')}`;
         } else {
-          errors.password = passwordErrors[0];
+          newErrors.password = passwordErrors[0];
         }
       }
     }
 
     if (formData.password !== formData.passwordConfirmation) {
-      errors.password = "Passwords do not match";
+      newErrors.password = newErrors.password 
+        ? `${newErrors.password}. Also, passwords do not match`
+        : "Passwords do not match";
     }
 
-    setFieldErrors(errors);
-
-    // Check if there are any errors
-    return Object.values(errors).some(error => error !== "");
-  };
-
-  // ✅ Extract specific field errors from backend response
-  const extractFieldErrors = (errors: any) => {
-    const fieldErrors = {
-      email: "",
-      username: "",
-      password: ""
-    };
-
-    if (errors.email) {
-      if (Array.isArray(errors.email)) {
-        fieldErrors.email = errors.email[0];
-      } else if (typeof errors.email === 'string') {
-        fieldErrors.email = errors.email;
-      } else if (errors.email.includes('already exists')) {
-        fieldErrors.email = "Email has already been used";
-      }
-    }
-
-    if (errors.username) {
-      if (Array.isArray(errors.username)) {
-        fieldErrors.username = errors.username[0];
-      } else if (typeof errors.username === 'string') {
-        fieldErrors.username = errors.username;
-      } else if (errors.username.includes('already exists')) {
-        fieldErrors.username = "Username has already been used";
-      }
-    }
-
-    if (errors.password) {
-      if (Array.isArray(errors.password)) {
-        fieldErrors.password = errors.password[0];
-      } else if (typeof errors.password === 'string') {
-        fieldErrors.password = errors.password;
-      }
-    }
-
-    return fieldErrors;
+    setFieldErrors(newErrors);
+    return Object.keys(newErrors).length > 0;
   };
 
   // ✅ Password strength indicator
@@ -260,7 +219,7 @@ export default function SignUp() {
 
   const passwordStrength = getPasswordStrength(formData.password);
 
-  // ✅ Handle Sign Up
+  // ✅ Handle Sign Up with COMPLETE localStorage clearing
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -272,7 +231,7 @@ export default function SignUp() {
       passwordConfirmation: true
     });
 
-    // Validasi client-side
+    // Client-side validation
     if (validateForm()) {
       return;
     }
@@ -282,71 +241,52 @@ export default function SignUp() {
     setFieldErrors({ email: "", username: "", password: "" });
 
     try {
-      console.log("🔄 Sending signup request...");
+      console.log("🔄 Attempting sign up...");
       
-      const response = await fetch("http://127.0.0.1:8000/api/auth/signup/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: formData.email,
-          username: formData.username,
-          password: formData.password,
-          password_confirm: formData.passwordConfirmation,
-        }),
-      });
-
-      console.log("📨 Response status:", response.status);
+      // ✅ Clear ALL localStorage before sign up (fresh start)
+      clearAllLocalStorageData();
       
-      const data = await response.json();
-      console.log("📨 Response data:", data);
-
-      // ✅ Handle response
-      if (response.status === 201 && data.success) {
+      // ✅ Use the signUp method from AuthContext
+      const result = await signUp(
+        formData.email,
+        formData.username,
+        formData.password,
+        formData.passwordConfirmation
+      );
+      
+      if (result.success) {
         console.log("✅ Registration successful!");
-        
-        // ✅ Gunakan login function dari context
-        login(data.tokens, data.user);
-        
-        console.log("💾 Data saved via AuthContext");
         console.log("🔄 Redirecting to home...");
-        
         navigate("/");
       } else {
-        console.log("❌ Registration failed");
+        console.log("❌ Registration failed:", result.error);
         
-        // ✅ Handle field-specific errors from backend
-        if (data.errors) {
-          const extractedErrors = extractFieldErrors(data.errors);
-          setFieldErrors(extractedErrors);
-          
-          // Also show general error if no specific field errors
-          if (!Object.values(extractedErrors).some(error => error !== "")) {
-            setError("Registration failed. Please check your input.");
+        // Handle field errors
+        if (result.fieldErrors) {
+          setFieldErrors(result.fieldErrors);
+          if (result.error) {
+            setError(result.error);
           }
-        } else if (data.error) {
-          setError(data.error);
         } else {
-          setError("Registration failed");
+          setError(result.error || "Registration failed");
         }
       }
     } catch (err) {
-      console.error("🚨 SignUp network error:", err);
-      setError("Network error. Please check if server is running.");
+      console.error("🚨 SignUp error:", err);
+      setError("An unexpected error occurred");
     } finally {
       setLoading(false);
     }
   };
 
-  // Fungsi untuk langsung ke Sign In
+  // Function to go to Sign In
   const handleSignInRedirect = () => {
-    navigate("/Signin");
+    navigate("/signin");
   };
 
   // ✅ Helper to show field error only if touched
-  const shouldShowError = (fieldName: keyof typeof touchedFields) => {
-    return touchedFields[fieldName] && fieldErrors[fieldName as keyof typeof fieldErrors];
+  const shouldShowError = (fieldName: string) => {
+    return touchedFields[fieldName] && fieldErrors[fieldName];
   };
 
   return (
@@ -514,7 +454,7 @@ export default function SignUp() {
                 )}
               </div>
 
-              {/* ✅ Tombol Sign Up */}
+              {/* ✅ Sign Up Button */}
               <button
                 type="submit"
                 disabled={loading}

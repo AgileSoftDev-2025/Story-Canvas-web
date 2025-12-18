@@ -1,142 +1,47 @@
-// frontend/src/contexts/AuthContext.tsx
+// frontend/src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { localStorageService } from '../utils/localStorageService';
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-}
-
-interface AuthTokens {
-  access: string;
-  refresh: string;
-}
+import { authService } from '../utils/authService';
+import type { User, AuthTokens } from '../utils/authService';
 
 interface AuthContextType {
   user: User | null;
-  isAuthenticated: boolean;
-  token: string | null;
+  tokens: AuthTokens | null;
   login: (tokens: AuthTokens, userData: User) => void;
-  logout: () => Promise<void>;
+  logout: () => void;
+  signIn: (username: string, password: string) => Promise<{success: boolean; error?: string}>;
+  signUp: (email: string, username: string, password: string, passwordConfirmation: string) => 
+    Promise<{success: boolean; error?: string; fieldErrors?: Record<string, string>}>;
+  isAuthenticated: boolean;
   loading: boolean;
-  refreshToken: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider = ({ children }: AuthProviderProps) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [tokens, setTokens] = useState<AuthTokens | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Helper function to clear guest data when user logs in
-  const clearGuestData = (): void => {
-    console.log('🧹 Clearing guest data from localStorage');
-    
-    // Clear current user if it's a guest
-    const currentUser = localStorageService.getCurrentUser();
-    if (currentUser && currentUser.username.startsWith('guest_')) {
-      localStorageService.clearCurrentUser();
-    }
-    
-    // Only clear guest projects, keep user project IDs
-    const allProjects = localStorageService.getAllProjects();
-    const guestProjects = allProjects.filter(p => p.is_guest_project === true);
-    
-    if (guestProjects.length > 0) {
-      console.log(`🗑️ Removing ${guestProjects.length} guest projects`);
-      guestProjects.forEach(project => {
-        localStorageService.deleteProject(project.project_id);
-      });
-    }
-    
-    // Clear any guest-related user stories, wireframes, scenarios
-    try {
-      const userStories = localStorageService.getAllUserStories();
-      const guestUserStories = userStories.filter(us => 
-        guestProjects.some(p => p.project_id === us.project_id)
-      );
-      if (guestUserStories.length > 0) {
-        console.log(`🗑️ Removing ${guestUserStories.length} guest user stories`);
-      }
-
-      const wireframes = localStorageService.getAllWireframes();
-      const guestWireframes = wireframes.filter(w => 
-        guestProjects.some(p => p.project_id === w.project_id)
-      );
-      if (guestWireframes.length > 0) {
-        console.log(`🗑️ Removing ${guestWireframes.length} guest wireframes`);
-      }
-
-      const scenarios = localStorageService.getAllScenarios();
-      const guestScenarios = scenarios.filter(s => 
-        guestProjects.some(p => p.project_id === s.project_id)
-      );
-      if (guestScenarios.length > 0) {
-        console.log(`🗑️ Removing ${guestScenarios.length} guest scenarios`);
-      }
-    } catch (error) {
-      console.warn('⚠️ Error cleaning guest data:', error);
-    }
-  };
-
-  // Helper function to clear all local data on logout
-  const clearAllLocalData = (): void => {
-    console.log('🧹 Clearing all localStorage data on logout');
-    
-    // Clear user project IDs along with other data
-    localStorage.removeItem('user_project_ids');
-    
-    // Clear all localStorage service data
-    localStorageService.clearAllData();
-    
-    // Clear auth-related items
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('current_project_id');
-  };
-
-  // Check and clean storage on initial load
-  useEffect(() => {
-    const checkAndCleanStorage = () => {
-      const token = localStorage.getItem('access_token');
-      const currentUser = localStorageService.getCurrentUser();
-      
-      // If user is logged in but there's guest data, clean it
-      if (token && currentUser && currentUser.username.startsWith('guest_')) {
-        console.log('🔄 Cleaning guest data on page load for logged-in user');
-        clearGuestData();
-      }
-    };
-
-    checkAndCleanStorage();
-  }, []);
 
   useEffect(() => {
     const checkAuth = () => {
       try {
-        const accessToken = localStorage.getItem('access_token');
-        const userData = localStorage.getItem('user');
-        
-        if (accessToken && userData) {
-          const parsedUser = JSON.parse(userData);
-          setUser(parsedUser);
-          setToken(accessToken);
-          console.log('✅ User authenticated from localStorage:', parsedUser.username);
+        const isAuth = authService.isAuthenticated();
+        if (isAuth) {
+          const storedUser = authService.getCurrentUser();
+          const accessToken = authService.getAccessToken();
+          const refreshToken = authService.getRefreshToken();
+          
+          if (storedUser && accessToken) {
+            setUser(storedUser);
+            setTokens({
+              access: accessToken,
+              refresh: refreshToken || ''
+            });
+          }
         }
       } catch (error) {
-        console.error('❌ Error checking auth:', error);
-        // Clear corrupted data
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
+        console.error('Auth check error:', error);
       } finally {
         setLoading(false);
       }
@@ -145,111 +50,104 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     checkAuth();
   }, []);
 
-  const login = (tokens: AuthTokens, userData: User) => {
-    console.log('🔐 Logging in user:', userData.username);
-    
-    // Clear guest data before setting new user data
-    clearGuestData();
-    
-    localStorage.setItem('access_token', tokens.access);
-    localStorage.setItem('refresh_token', tokens.refresh);
-    localStorage.setItem('user', JSON.stringify(userData));
-    setUser(userData);
-    setToken(tokens.access);
-    console.log('✅ Login successful');
-  };
-
-  const refreshToken = async (): Promise<boolean> => {
+  const login = (authTokens: AuthTokens, userData: User) => {
     try {
-      const refreshToken = localStorage.getItem('refresh_token');
+      // Store tokens
+      authService.setTokens(authTokens);
       
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
-
-      const response = await fetch('http://127.0.0.1:8000/api/auth/refresh/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          refresh_token: refreshToken
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Token refresh failed');
-      }
-
-      const result = await response.json();
+      // Store user
+      authService.setCurrentUser(userData);
       
-      if (result.success && result.tokens?.access) {
-        localStorage.setItem('access_token', result.tokens.access);
-        setToken(result.tokens.access);
-        console.log('✅ Token refreshed successfully');
-        return true;
-      } else {
-        throw new Error('Invalid response format');
-      }
+      // Update state
+      setUser(userData);
+      setTokens(authTokens);
+      
+      console.log("✅ AuthContext login completed");
     } catch (error) {
-      console.error('❌ Error refreshing token:', error);
-      await logout();
-      return false;
+      console.error('Login error in AuthContext:', error);
+      throw error;
     }
   };
 
-  const logout = async (): Promise<void> => {
+  const signIn = async (username: string, password: string) => {
     try {
-      const refreshToken = localStorage.getItem('refresh_token');
-      const accessToken = localStorage.getItem('access_token');
-      
-      // Call backend signout endpoint if tokens exist
-      if (refreshToken && accessToken) {
-        await fetch('http://127.0.0.1:8000/api/auth/signout/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            refresh_token: refreshToken
-          }),
-        }).catch(error => {
-          console.error('❌ Logout API call failed:', error);
-        });
+      const result = await authService.signIn(username, password);
+      if (result.success && result.tokens && result.user) {
+        setUser(result.user);
+        setTokens(result.tokens);
       }
+      return result;
     } catch (error) {
-      console.error('❌ Error during logout:', error);
-    } finally {
-      // Clear all local data including user project IDs
-      clearAllLocalData();
-      setUser(null);
-      setToken(null);
-      console.log('✅ Logout completed');
+      console.error('SignIn error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Sign in failed'
+      };
     }
   };
 
-  const value: AuthContextType = {
-    user,
-    isAuthenticated: !!user && !!token,
-    token,
-    login,
-    logout,
-    loading,
-    refreshToken,
+  const signUp = async (email: string, username: string, password: string, passwordConfirmation: string) => {
+    try {
+      const result = await authService.signUp(email, username, password, passwordConfirmation);
+      if (result.success && result.tokens && result.user) {
+        setUser(result.user);
+        setTokens(result.tokens);
+      }
+      return result;
+    } catch (error) {
+      console.error('SignUp error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Sign up failed'
+      };
+    }
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const logout = () => {
+  try {
+    // First clear ALL localStorage
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Then clear auth service
+    authService.signOut();
+    
+    // Clear React state
+    setUser(null);
+    setTokens(null);
+    
+    console.log("✅ User logged out and ALL localStorage cleared");
+    
+    // Optional: Reload the page to ensure clean state
+    window.location.href = "/"; // Redirect to home
+  } catch (error) {
+    console.error('Logout error:', error);
+  }
 };
 
-export const useAuth = (): AuthContextType => {
+  const value = {
+    user,
+    tokens,
+    login,
+    logout,
+    signIn,
+    signUp,
+    isAuthenticated: !!user,
+    loading,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+  
+  // Provide backward compatibility - map tokens to token property
+  return {
+    ...context,
+    token: context.tokens?.access || null,  // Add token property as alias for tokens.access
+  };
 };

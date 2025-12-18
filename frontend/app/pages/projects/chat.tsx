@@ -19,7 +19,7 @@ interface ProjectFormData {
 
 export default function Chat() {
   const navigate = useNavigate();
-  const { isAuthenticated, token, user, loading: authLoading } = useAuth();
+  const { isAuthenticated, token, user, loading: authLoading, tokens: authTokens } = useAuth();
 
   const [formData, setFormData] = useState<ProjectFormData>({
     goal: "",
@@ -42,19 +42,28 @@ export default function Chat() {
     console.log('Auth loading:', authLoading);
     console.log('Is authenticated:', isAuthenticated);
     console.log('User:', user);
+    console.log('Token from useAuth:', token ? `exists (${token.substring(0, 20)}...)` : 'null');
+    console.log('Full tokens object:', authTokens);
+
+    // Check localStorage token for debugging
+    const storedToken = localStorage.getItem('access_token');
+    console.log('Token from localStorage:', storedToken ? `exists (${storedToken.substring(0, 20)}...)` : 'not found');
 
     if (!authLoading) {
       loadExistingProject();
       
-      if (isAuthenticated && user) {
+      if (isAuthenticated && user && token) {
         setMode('user');
         console.log('✅ User mode activated:', user.username);
       } else {
         setMode('guest');
-        console.log('🟡 Guest mode activated');
+        console.log('🟡 Guest mode activated - Reason:', 
+          !isAuthenticated ? 'not authenticated' : 
+          !user ? 'no user' : 
+          !token ? 'no token' : 'unknown');
       }
     }
-  }, [isAuthenticated, user, authLoading]);
+  }, [isAuthenticated, user, authLoading, token, authTokens]);
 
   const loadExistingProject = () => {
     try {
@@ -108,6 +117,24 @@ export default function Chat() {
   const debugLocalStorage = () => {
     console.log('=== 🐛 MANUAL DEBUG ===');
     localStorageService.debugStorage();
+    
+    // Add token and auth state debugging
+    console.log('=== 🔑 AUTH STATE DEBUG ===');
+    console.log('AuthContext - isAuthenticated:', isAuthenticated);
+    console.log('AuthContext - user:', user);
+    console.log('AuthContext - token:', token ? `exists (${token.substring(0, 20)}...)` : 'null');
+    console.log('AuthContext - tokens object:', authTokens);
+    
+    const storedAccessToken = localStorage.getItem('access_token');
+    const storedRefreshToken = localStorage.getItem('refresh_token');
+    const storedCurrentUser = localStorage.getItem('currentUser');
+    const storedCurrent_user = localStorage.getItem('current_user');
+    
+    console.log('LocalStorage - access_token:', storedAccessToken ? `exists (${storedAccessToken.substring(0, 20)}...)` : 'not found');
+    console.log('LocalStorage - refresh_token:', storedRefreshToken ? 'exists' : 'not found');
+    console.log('LocalStorage - currentUser:', storedCurrentUser);
+    console.log('LocalStorage - current_user:', storedCurrent_user);
+    console.log('Current mode:', mode);
   };
 
   // Validate and submit
@@ -118,6 +145,10 @@ export default function Chat() {
     }
 
     console.log('🔄 SUBMISSION STARTED ==========');
+    console.log('Current mode:', mode);
+    console.log('Is authenticated:', isAuthenticated);
+    console.log('Token from useAuth:', token ? `exists (${token.substring(0, 20)}...)` : 'null');
+    console.log('Tokens object:', authTokens);
     
     // Validasi form
     const validation = projectService.validateFormData(formData);
@@ -175,11 +206,56 @@ export default function Chat() {
         }
       } else {
         console.log('🔵 MODE: USER - Using API');
-        if (!token) {
-          throw new Error('Authentication token not found');
+        console.log('Checking authentication for API call...');
+        
+        // First try token from useAuth
+        let authToken = token;
+        
+        if (!authToken) {
+          console.log('⚠️ Token not found from useAuth, checking localStorage...');
+          authToken = localStorage.getItem('access_token');
+          
+          if (!authToken) {
+            console.error('❌ No authentication token found anywhere!');
+            
+            // Double check if we should really be in user mode
+            if (!isAuthenticated || !user) {
+              console.log('🔀 Switching to guest mode because user is not properly authenticated');
+              setMode('guest');
+              throw new Error('Not properly authenticated. Switching to guest mode...');
+            }
+            
+            throw new Error('Authentication token not found. Please login again.');
+          }
+          
+          console.log('✅ Using token from localStorage:', authToken.substring(0, 20) + '...');
+        } else {
+          console.log('✅ Using token from useAuth:', authToken.substring(0, 20) + '...');
         }
-        projectId = await projectService.createUserProject(formData, token);
-        console.log('✅ User project creation completed with ID:', projectId);
+        
+        // Verify token format
+        if (!authToken.startsWith('eyJ')) {
+          console.warn('⚠️ Token does not start with expected JWT prefix "eyJ"');
+        }
+        
+        // Try API call
+        try {
+          projectId = await projectService.createUserProject(formData, authToken);
+          console.log('✅ User project creation completed with ID:', projectId);
+        } catch (apiError: any) {
+          console.error('❌ API call failed:', apiError);
+          
+          // If API fails with auth error, fallback to guest mode
+          if (apiError.message?.includes('auth') || 
+              apiError.message?.includes('token') || 
+              apiError.message?.includes('401') || 
+              apiError.message?.includes('403')) {
+            console.log('🔄 API authentication failed, falling back to guest mode');
+            setMode('guest');
+            throw new Error('Authentication failed. Saving locally in guest mode instead.');
+          }
+          throw apiError;
+        }
       }
 
       // Set form tidak bisa edit lagi
@@ -189,7 +265,10 @@ export default function Chat() {
       loadExistingProject();
 
       // Show success message
-      setError("✅ Project submitted successfully! Redirecting...");
+      const successMsg = mode === 'user' 
+        ? "✅ Project submitted successfully to cloud! Redirecting..." 
+        : "✅ Project saved locally! Redirecting...";
+      setError(successMsg);
       console.log('🎉 Project submitted successfully!');
       
       // Navigate setelah delay singkat
@@ -197,13 +276,66 @@ export default function Chat() {
         navigate(`/user-stories/${projectId}`); // Add projectId to URL
       }, 1000);
 
-    } catch (err) {
+    } catch (err: any) {
+      console.error("❌ SUBMISSION ERROR:", err);
+      
+      // Check if this is a mode switching error
+      if (err.message?.includes('Switching to guest mode') || 
+          err.message?.includes('falling back to guest mode')) {
+        
+        console.log('🔄 Attempting guest mode submission after authentication failure');
+        setMode('guest');
+        
+        // Retry in guest mode
+        try {
+          // Create new project dengan status submitted
+          const newProject = localStorageService.createProject({
+            user_id: localStorageService.getCurrentUser()?.id || 'guest',
+            title: projectService.generateProjectTitle(formData.goal),
+            objective: formData.goal,
+            scope: formData.scope,
+            flow: formData.alur,
+            additional_info: formData.info,
+            domain: "general",
+            language: "en",
+            nlp_analysis: {},
+            users_data: formData.users.split(',').map(u => u.trim()).filter(u => u),
+            features_data: formData.fitur.split(',').map(f => f.trim()).filter(f => f),
+            status: 'completed'
+          });
+          
+          const projectId = newProject.project_id;
+          setIsEditing(false);
+          loadExistingProject();
+          
+          setError("✅ Project saved locally (auth failed). Redirecting...");
+          
+          setTimeout(() => {
+            navigate(`/user-stories/${projectId}`);
+          }, 1000);
+          
+          return;
+        } catch (guestError) {
+          console.error('❌ Guest mode fallback also failed:', guestError);
+        }
+      }
+      
       const errorMessage = err instanceof Error 
         ? err.message 
         : 'Failed to submit project. Please try again.';
       
       setError(`❌ ${errorMessage}`);
-      console.error("❌ SUBMISSION ERROR:", err);
+      
+      // 如果是认证错误，建议用户重新登录
+      if (errorMessage.includes('Authentication') || 
+          errorMessage.includes('token') || 
+          errorMessage.includes('login')) {
+        
+        setTimeout(() => {
+          setError(prev => prev + ' Redirecting to login...');
+          setTimeout(() => navigate('/auth/signin'), 1500);
+        }, 1000);
+      }
     } finally {
       setIsSubmitting(false);
       console.log('🔄 SUBMISSION COMPLETED ==========');
@@ -254,9 +386,9 @@ export default function Chat() {
         {/* Debug Button */}
         <button 
           onClick={debugLocalStorage}
-          className="fixed top-20 right-6 bg-gray-500 text-white px-3 py-2 rounded text-sm z-50"
+          className="fixed top-20 right-6 bg-gray-500 text-white px-3 py-2 rounded text-sm z-50 hover:bg-gray-600 transition-colors"
         >
-          🐛 Debug
+          🐛 Debug Auth
         </button>
 
         {/* Title and Mode Indicator */}
@@ -282,8 +414,18 @@ export default function Chat() {
             ) : (
               <div className="inline-flex items-center px-4 py-2 bg-green-100 border border-green-300 rounded-full">
                 <span className="text-green-800 text-sm font-medium">
-                  🔐 Logged in as {user?.username} - Data saved to cloud
+                  🔐 Logged in as {user?.username || 'User'} - Data saved to cloud
                 </span>
+                <button 
+                  onClick={() => {
+                    console.log('Switching to guest mode manually');
+                    setMode('guest');
+                    setError('Switched to guest mode. Data will be saved locally.');
+                  }}
+                  className="ml-2 text-green-700 hover:text-green-900 underline text-sm"
+                >
+                  Switch to Guest Mode
+                </button>
               </div>
             )}
           </div>
@@ -334,11 +476,16 @@ export default function Chat() {
         {/* Error Message */}
         {error && (
           <div className={`mb-6 p-4 rounded-lg text-center font-medium ${
-            error.includes('✅') 
+            error.includes('✅') || error.includes('saved')
               ? 'bg-green-50 border border-green-200 text-green-700'
+              : error.includes('⚠️')
+              ? 'bg-yellow-50 border border-yellow-200 text-yellow-700'
               : 'bg-red-50 border border-red-200 text-red-700'
           }`}>
             {error}
+            {error.includes('Switching to guest mode') && (
+              <p className="text-sm mt-2">Please try submitting again.</p>
+            )}
           </div>
         )}
 
@@ -481,7 +628,7 @@ export default function Chat() {
                   Submitting...
                 </div>
               ) : (
-                'Submit Project'
+                `Submit ${mode === 'user' ? 'to Cloud' : 'Locally'}`
               )}
             </button>
           )}
