@@ -769,7 +769,122 @@ export default function WireframeGenerated() {
 
   const wireframeService = WireframeService.getInstance();
 
-  // Cleanup function
+  const cleanupDuplicateWireframeStorage = useCallback(() => {
+  try {
+    console.log('🔧 Cleaning up duplicate wireframe storage on component mount...');
+    
+    // Get all localStorage keys
+    const allKeys = Object.keys(localStorage);
+    
+    // Find all wireframe-related keys except local_wireframes
+    const wireframeKeys = allKeys.filter(key => 
+      key.toLowerCase().includes('wireframe') && 
+      key !== 'local_wireframes'
+    );
+    
+    // If we find duplicates, consolidate them
+    if (wireframeKeys.length > 0) {
+      console.log(`⚠️ Found ${wireframeKeys.length} duplicate wireframe keys:`, wireframeKeys);
+      
+      // Start with current wireframes from local_wireframes
+      let allWireframes = localStorageService.getAllWireframes();
+      
+      // Collect from duplicates
+      wireframeKeys.forEach(key => {
+        try {
+          const data = localStorage.getItem(key);
+          if (data) {
+            const wireframes = JSON.parse(data);
+            if (Array.isArray(wireframes)) {
+              console.log(`📦 Found ${wireframes.length} wireframes in duplicate key: ${key}`);
+              allWireframes = [...allWireframes, ...wireframes];
+            }
+          }
+        } catch (e) {
+          console.log(`⚠️ Could not parse ${key}:`, e);
+        }
+        
+        // Remove the duplicate key
+        localStorage.removeItem(key);
+        console.log(`🗑️ Removed duplicate key: ${key}`);
+      });
+      
+      // Remove duplicates by wireframe_id
+      const uniqueWireframes = Array.from(
+        new Map(allWireframes.map(wf => [wf.wireframe_id, wf])).values()
+      );
+      
+      // Save all unique wireframes back to local_wireframes
+      localStorage.setItem('local_wireframes', JSON.stringify(uniqueWireframes));
+      console.log(`✅ Consolidated ${uniqueWireframes.length} wireframes to local_wireframes`);
+      
+    } else {
+      console.log('✅ No duplicate wireframe storage found');
+    }
+  } catch (error) {
+    console.error('Error cleaning up duplicate storage:', error);
+  }
+}, []);
+
+
+  // Cleanup function for duplicate wireframe storage
+  const cleanupDuplicateStorage = useCallback(() => {
+    try {
+      console.log('🔧 Cleaning up duplicate wireframe storage...');
+      
+      const allKeys = Object.keys(localStorage);
+      const wireframeKeys = allKeys.filter(key => 
+        key.toLowerCase().includes('wireframe') && 
+        key !== 'local_wireframes'
+      );
+      
+      if (wireframeKeys.length > 0) {
+        console.log(`⚠️ Found ${wireframeKeys.length} duplicate wireframe keys:`, wireframeKeys);
+        
+        // Start with current wireframes
+        let allWireframes = localStorageService.getAllWireframes();
+        
+        wireframeKeys.forEach(key => {
+          try {
+            const data = localStorage.getItem(key);
+            if (data) {
+              const wireframes = JSON.parse(data);
+              if (Array.isArray(wireframes)) {
+                console.log(`📦 Found ${wireframes.length} wireframes in duplicate key: ${key}`);
+                allWireframes = [...allWireframes, ...wireframes];
+              }
+            }
+          } catch (e) {
+            console.log(`⚠️ Could not parse ${key}:`, e);
+          }
+          
+          // Remove the duplicate key
+          localStorage.removeItem(key);
+          console.log(`🗑️ Removed duplicate key: ${key}`);
+        });
+        
+        // Remove duplicates by wireframe_id
+        const uniqueWireframes = Array.from(
+          new Map(allWireframes.map(wf => [wf.wireframe_id, wf])).values()
+        );
+        
+        // Save all unique wireframes
+        localStorage.setItem('local_wireframes', JSON.stringify(uniqueWireframes));
+        console.log(`✅ Consolidated ${uniqueWireframes.length} wireframes to local_wireframes`);
+        
+        // Debug: Show storage status
+        const finalWireframes = localStorageService.getAllWireframes();
+        console.log(`📊 Final wireframe count in local_wireframes: ${finalWireframes.length}`);
+      } else {
+        console.log('✅ No duplicate wireframe storage found');
+      }
+    } catch (error) {
+      console.error('Error cleaning up duplicate storage:', error);
+    }
+  }, []);
+
+  // Enhanced cleanup function for component mount
+  // Cleanup function for component unmount
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
@@ -779,16 +894,20 @@ export default function WireframeGenerated() {
     };
   }, []);
 
-  // Initial load
+  // Initial load with cleanup
   useEffect(() => {
     if (projectId) {
+      // Run cleanup first
+      cleanupDuplicateWireframeStorage();
+      
+      // Then load project data
       loadProjectData();
       handleInitialLoad();
     } else {
       setError('Project ID is required');
       setLoading(false);
     }
-  }, [projectId, isAuthenticated]);
+  }, [projectId, isAuthenticated, cleanupDuplicateWireframeStorage]);
 
   const loadProjectData = useCallback(() => {
     if (!projectId) {
@@ -1135,185 +1254,175 @@ export default function WireframeGenerated() {
     }
   }, [wireframes, handleGeneratePNG]);
 
-  // NEW: Local project wireframe generation function
-  // ... rest of the imports and code remains the same until the handleGenerateLocalWireframes function ...
-
-// NEW: Local project wireframe generation function
-const handleGenerateLocalWireframes = useCallback(async () => {
-  if (generationInProgressRef.current) {
-    console.log('Generation already in progress, skipping...');
-    return;
-  }
-
-  if (!projectId || !project) {
-    setError('Project data is required');
-    return;
-  }
-
-  // Check if we have user stories
-  const userStories: LocalUserStory[] = localStorageService.getUserStoriesByProject(projectId);
-  if (!userStories || userStories.length === 0) {
-    setError('No user stories found. Please create user stories first.');
-    return;
-  }
-
-  generationInProgressRef.current = true;
-  setGenerating(true);
-  setLoading(true);
-  setError(null);
-  setSuccess(null);
-  setSyncStatus(null);
-
-  // Simulate progress
-  const simulateProgress = () => {
-    setProgress(0);
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
+  // Fixed Local wireframe generation function
+  const handleGenerateLocalWireframes = useCallback(async () => {
+    if (generationInProgressRef.current) {
+      console.log('Generation already in progress, skipping...');
+      return;
     }
-    
-    const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 90) {
-          clearInterval(interval);
-          return 90;
-        }
-        return prev + 2;
-      });
-    }, 100);
-    
-    progressIntervalRef.current = interval;
-    return interval;
-  };
 
-  simulateProgress();
-
-  try {
-    // Clear existing wireframes
-    const existingWireframes = localStorageService.getWireframesByProject(projectId);
-    if (existingWireframes.length > 0) {
-      setWireframes([]);
+    if (!projectId || !project) {
+      setError('Project data is required');
+      return;
     }
-    
-    // Prepare project data - use users_data and features_data from LocalProject
-    const projectData = {
-      title: project.title || 'Local Project',
-      objective: project.objective || '',
-      users: project.users_data || [],  // Fixed: use users_data instead of users
-      features: project.features_data || [],  // Fixed: use features_data instead of features
-      scope: project.scope || '',
-      flow: project.flow || '',
-      additional_info: project.additional_info || '',
-      domain: project.domain || 'general'
+
+    const userStories: LocalUserStory[] = localStorageService.getUserStoriesByProject(projectId);
+    if (!userStories || userStories.length === 0) {
+      setError('No user stories found. Please create user stories first.');
+      return;
+    }
+
+    generationInProgressRef.current = true;
+    setGenerating(true);
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    setSyncStatus(null);
+
+    const simulateProgress = () => {
+      setProgress(0);
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+      
+      const interval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(interval);
+            return 90;
+          }
+          return prev + 2;
+        });
+      }, 100);
+      
+      progressIntervalRef.current = interval;
+      return interval;
     };
 
-    // Call local API endpoint
-    setSyncStatus('Generating wireframes for local project...');
-    
-    const response = await fetch('/api/local-projects/generate-wireframes/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        project_id: projectId,
-        project_data: projectData,
-        user_stories: userStories
-      })
-    });
+    simulateProgress();
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Local wireframe generation failed');
-    }
-
-    const successMsg = `Successfully generated ${result.count || 0} wireframes for local project!`;
-    setSuccess(successMsg);
-    setSyncStatus(`✅ ${result.message}`);
-    
-    setProgress(100);
-    
-    // Save wireframes to local storage
-    if (result.wireframes && result.wireframes.length > 0) {
-      // First, let's check what methods are available in localStorageService
-      console.log('LocalStorageService methods:', Object.keys(localStorageService));
+    try {
+      // Clear existing wireframes for this project
+      const existingWireframes = localStorageService.getWireframesByProject(projectId);
+      if (existingWireframes.length > 0) {
+        localStorageService.clearProjectWireframes(projectId);
+        setWireframes([]);
+      }
       
-      // Try to save wireframes using available methods
-      result.wireframes.forEach((wireframe: LocalWireframe) => {
-        try {
-          // Check if wireframe already exists
-          const allWireframes = localStorageService.getAllWireframes();
-          const existing = allWireframes.find(w => w.wireframe_id === wireframe.wireframe_id);
-          
-          if (!existing) {
-            // Method 1: Try saveWireframe if it exists
-            if (typeof (localStorageService as any).saveWireframe === 'function') {
-              (localStorageService as any).saveWireframe(wireframe);
-            } 
-            // Method 2: Try addWireframe if it exists  
-            else if (typeof (localStorageService as any).addWireframe === 'function') {
-              (localStorageService as any).addWireframe(wireframe);
-            }
-            // Method 3: Direct localStorage manipulation as fallback
-            else {
-              console.log('Using direct localStorage fallback for wireframe saving');
-              const wireframesKey = `wireframes_${projectId}`;
-              const existingWireframesStr = localStorage.getItem(wireframesKey);
-              const existingWireframesArray = existingWireframesStr ? JSON.parse(existingWireframesStr) : [];
-              
-              // Add new wireframe
-              existingWireframesArray.push(wireframe);
-              
-              // Save back to localStorage
-              localStorage.setItem(wireframesKey, JSON.stringify(existingWireframesArray));
-              
-              // Also update the global wireframes storage
-              const allWireframesKey = 'wireframes';
-              const allWireframesStr = localStorage.getItem(allWireframesKey);
-              const allWireframesArray = allWireframesStr ? JSON.parse(allWireframesStr) : [];
-              
-              // Remove if exists (update)
-              const filteredAllWireframes = allWireframesArray.filter((w: LocalWireframe) => w.wireframe_id !== wireframe.wireframe_id);
-              filteredAllWireframes.push(wireframe);
-              
-              localStorage.setItem(allWireframesKey, JSON.stringify(filteredAllWireframes));
-            }
-          }
-        } catch (err) {
-          console.error('Error saving wireframe:', err);
-        }
+      const projectData = {
+        title: project.title || 'Local Project',
+        objective: project.objective || '',
+        users: project.users_data || [],
+        features: project.features_data || [],
+        scope: project.scope || '',
+        flow: project.flow || '',
+        additional_info: project.additional_info || '',
+        domain: project.domain || 'general'
+      };
+
+      setSyncStatus('Generating wireframes for local project...');
+      
+      const response = await fetch('/api/local-projects/generate-wireframes/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          project_id: projectId,
+          project_data: projectData,
+          user_stories: userStories
+        })
       });
-    }
-    
-    // Load the enhanced wireframes
-    setTimeout(async () => {
-      await loadEnhancedWireframes();
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Local wireframe generation failed');
+      }
+
+      const successMsg = `Successfully generated ${result.count || 0} wireframes for local project!`;
+      setSuccess(successMsg);
+      setSyncStatus(`✅ ${result.message}`);
+      
+      setProgress(100);
+      
+      // Save wireframes using the fixed localStorageService
+      if (result.wireframes && result.wireframes.length > 0) {
+        console.log(`💾 Saving ${result.wireframes.length} wireframes to local_wireframes...`);
+        
+        // Clear any existing wireframes for this project
+        localStorageService.clearProjectWireframes(projectId);
+        
+        // Save each wireframe using the unified storage method
+        result.wireframes.forEach((wireframe: LocalWireframe) => {
+          try {
+            // Prepare wireframe data for storage
+            const wireframeData: Omit<LocalWireframe, 'wireframe_id' | 'created_at' | 'updated_at'> = {
+              project_id: projectId,
+              page_name: wireframe.page_name || 'unnamed-page',
+              page_type: wireframe.page_type || 'general',
+              description: wireframe.description || `Wireframe for ${wireframe.page_name}`,
+              html_content: wireframe.html_content || '',
+              creole_content: wireframe.creole_content || '',
+              salt_diagram: wireframe.salt_diagram || '',
+              generated_with_rag: wireframe.generated_with_rag || false,
+              wireframe_type: wireframe.wireframe_type || 'desktop',
+              version: wireframe.version || 1,
+              preview_url: wireframe.preview_url || '',
+              stories_count: wireframe.stories_count || 0,
+              features_count: wireframe.features_count || 0,
+              generated_at: wireframe.generated_at || new Date().toISOString(),
+              is_local: true
+            };
+
+            // Use the wireframe's ID or generate a new one
+            const wireframeId = wireframe.wireframe_id || `local_${projectId}_${wireframe.page_name}_${Date.now()}`;
+            
+            // Save to unified storage
+            localStorageService.createWireframe(wireframeData, wireframeId);
+            console.log(`✅ Saved wireframe ${wireframeId} to local_wireframes`);
+            
+          } catch (err) {
+            console.error('Error saving wireframe:', err);
+          }
+        });
+        
+        console.log(`✅ All ${result.wireframes.length} wireframes saved to local_wireframes`);
+        
+        // Verify storage
+        const savedCount = localStorageService.getWireframesByProject(projectId).length;
+        console.log(`📊 Verified: ${savedCount} wireframes in local_wireframes for project ${projectId}`);
+      }
+      
+      // Load the enhanced wireframes
+      setTimeout(async () => {
+        await loadEnhancedWireframes();
+        setGenerating(false);
+        generationInProgressRef.current = false;
+        setLoading(false);
+      }, 1000);
+      
+    } catch (err) {
+      console.error('Local wireframe generation error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Generation failed';
+      setError(`Failed to generate wireframes: ${errorMessage}`);
       setGenerating(false);
-      generationInProgressRef.current = false;
       setLoading(false);
-    }, 1000);
-    
-  } catch (err) {
-    console.error('Local wireframe generation error:', err);
-    const errorMessage = err instanceof Error ? err.message : 'Generation failed';
-    setError(`Failed to generate wireframes: ${errorMessage}`);
-    setGenerating(false);
-    setLoading(false);
-    generationInProgressRef.current = false;
-    setSyncStatus('❌ Generation failed');
-  } finally {
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
-      progressIntervalRef.current = null;
+      generationInProgressRef.current = false;
+      setSyncStatus('❌ Generation failed');
+    } finally {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
     }
-  }
-}, [projectId, project, loadEnhancedWireframes]);
+  }, [projectId, project, loadEnhancedWireframes]);
 
   const handleGenerateWireframes = useCallback(async () => {
     if (generationInProgressRef.current) {
@@ -1361,15 +1470,12 @@ const handleGenerateLocalWireframes = useCallback(async () => {
         setWireframes([]);
       }
       
-      // Check if user is authenticated
       const authToken = localStorage.getItem('access_token');
       
       if (!isAuthenticated || !authToken) {
-        // Use local API for offline/unauthenticated users
         return await handleGenerateLocalWireframes();
       }
       
-      // For authenticated users, use the existing sync method
       const result = await wireframeService.generateWireframesWithSync(projectId, authToken, project);
       
       if (result.success) {
@@ -1548,7 +1654,7 @@ const handleGenerateLocalWireframes = useCallback(async () => {
                   className={`inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                     generating
                       ? 'bg-gray-300 cursor-not-allowed text-gray-500'
-                      : 'bg-orange-500 hover:bg-orange-600 text-white'
+                      : 'bg-orange-500                      hover:bg-orange-600 text-white'
                   }`}
                 >
                   {generating ? 'Regenerating...' : '🔄 Regenerate All'}
@@ -1717,7 +1823,7 @@ const handleGenerateLocalWireframes = useCallback(async () => {
                 <p className="text-sm text-gray-600">
                   {isAuthenticated 
                     ? "✅ Online mode: Wireframes will be saved to database for backup and sync across devices."
-                    : "🏠 Offline mode: Wireframes are saved locally. Sign in to enable cloud backup and sync."
+                    : "🏠 Offline mode: Wireframes are saved locally to local_wireframes. Sign in to enable cloud backup and sync."
                   }
                 </p>
               </div>

@@ -235,7 +235,7 @@ function HistoryContent() {
 
   // ✅ Click create new project button
   const handleCreateNew = () => {
-    navigate('/create-project');
+    navigate('/chat');
   };
 
   // ✅ Format date for display

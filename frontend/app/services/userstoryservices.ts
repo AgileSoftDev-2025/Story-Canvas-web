@@ -203,119 +203,168 @@ class UserStoryAPIService {
   }
 
   // Sync local stories to database
-  async syncLocalToDatabase(projectId: string, token: string): Promise<{
-    success: boolean;
-    syncedCount: number;
-    message: string;
-  }> {
-    try {
-      const localStories = localStorageService.getUserStoriesByProject(projectId);
-      
-      if (localStories.length === 0) {
-        return {
-          success: true,
-          syncedCount: 0,
-          message: 'No local stories to sync'
-        };
-      }
-
-      console.log(`📤 Syncing ${localStories.length} local stories to database...`);
-
-      let syncedCount = 0;
-      let errors: string[] = [];
-
-      // Sync each story individually
-      for (const localStory of localStories) {
-        try {
-          const storyData = {
-            project_id: projectId,
-            story_text: localStory.story_text,
-            role: localStory.role,
-            action: localStory.action,
-            benefit: localStory.benefit,
-            feature: localStory.feature,
-            acceptance_criteria: localStory.acceptance_criteria,
-            priority: localStory.priority,
-            story_points: localStory.story_points,
-            status: localStory.status,
-            generated_by_llm: localStory.generated_by_llm,
-            iteration: localStory.iteration
-          };
-
-          // Try to update existing story first
-          const updateResponse = await fetch(`/api/user-stories/update-api/${localStory.story_id}/`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(storyData)
-          });
-
-          if (updateResponse.ok) {
-            console.log(`✅ Updated story ${localStory.story_id} in database`);
-            syncedCount++;
-            continue;
-          }
-
-          // If update failed (404), try to create new
-          if (updateResponse.status === 404) {
-            const createResponse = await fetch('/api/user-stories/create-api/', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                ...storyData,
-                story_id: localStory.story_id
-              })
-            });
-
-            if (createResponse.ok) {
-              const result = await createResponse.json();
-              console.log(`✅ Created story ${localStory.story_id} in database`);
-              syncedCount++;
-            } else {
-              const errorText = await createResponse.text();
-              errors.push(`Failed to create story ${localStory.story_id}: ${errorText}`);
-            }
-          } else {
-            const errorText = await updateResponse.text();
-            errors.push(`Failed to update story ${localStory.story_id}: ${errorText}`);
-          }
-        } catch (err) {
-          console.error(`Error syncing story ${localStory.story_id}:`, err);
-          errors.push(`Error syncing story ${localStory.story_id}: ${err}`);
-        }
-      }
-
-      if (errors.length > 0) {
-        console.warn(`Sync completed with ${errors.length} errors:`, errors);
-      }
-
-      // Save sync timestamp
-      if (syncedCount > 0) {
-        this.setLastSyncTime(projectId);
-      }
-
+  // Sync local stories to database with duplicate handling
+async syncLocalToDatabase(projectId: string, token: string): Promise<{
+  success: boolean;
+  syncedCount: number;
+  message: string;
+}> {
+  try {
+    const localStories = localStorageService.getUserStoriesByProject(projectId);
+    
+    if (localStories.length === 0) {
       return {
-        success: errors.length === 0,
-        syncedCount,
-        message: errors.length === 0 
-          ? `Successfully synced ${syncedCount} stories to database`
-          : `Synced ${syncedCount} stories with ${errors.length} errors`
-      };
-
-    } catch (error) {
-      console.error('Error syncing local to database:', error);
-      return {
-        success: false,
+        success: true,
         syncedCount: 0,
-        message: `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        message: 'No local stories to sync'
       };
     }
+
+    console.log(`📤 Syncing ${localStories.length} local stories to database...`);
+
+    let syncedCount = 0;
+    let duplicateCount = 0;
+    let errors: string[] = [];
+
+    // First, get existing story IDs from database to avoid duplicates
+    let existingStoryIds: Set<string> = new Set();
+    try {
+      const existingStoriesResponse = await fetch(
+        `/api/projects/${projectId}/user-stories/`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+      
+      if (existingStoriesResponse.ok) {
+        const existingStories = await existingStoriesResponse.json();
+        existingStoryIds = new Set(existingStories.map((story: any) => story.story_id));
+        console.log(`📊 Found ${existingStoryIds.size} existing stories in database`);
+      }
+    } catch (error) {
+      console.warn('Could not fetch existing stories, will try to sync anyway:', error);
+    }
+
+    // Sync each story individually
+    for (const localStory of localStories) {
+      try {
+        const storyData = {
+          project_id: projectId,
+          story_text: localStory.story_text,
+          role: localStory.role,
+          action: localStory.action,
+          benefit: localStory.benefit,
+          feature: localStory.feature,
+          acceptance_criteria: localStory.acceptance_criteria,
+          priority: localStory.priority,
+          story_points: localStory.story_points,
+          status: localStory.status,
+          generated_by_llm: localStory.generated_by_llm,
+          iteration: localStory.iteration
+        };
+
+        // Check if story already exists
+        if (existingStoryIds.has(localStory.story_id)) {
+          console.log(`⏭️ Story ${localStory.story_id} already exists in database, skipping...`);
+          duplicateCount++;
+          continue;
+        }
+
+        // Try to create new story
+        const createResponse = await fetch('/api/user-stories/create-api/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            ...storyData,
+            story_id: localStory.story_id
+          })
+        });
+
+        if (createResponse.ok) {
+          const result = await createResponse.json();
+          console.log(`✅ Created story ${localStory.story_id} in database`);
+          syncedCount++;
+          
+          // Add to existing IDs set to prevent future duplicates in this batch
+          existingStoryIds.add(localStory.story_id);
+        } else {
+          const errorText = await createResponse.text();
+          const errorData = errorText ? JSON.parse(errorText) : {};
+          
+          // Check for duplicate error
+          if (createResponse.status === 400 && errorData.story_id && errorData.story_id.includes('already exists')) {
+            console.warn(`⚠️ Story ${localStory.story_id} already exists (detected by server)`);
+            duplicateCount++;
+            
+            // Option 1: Try to update instead
+            try {
+              console.log(`🔄 Attempting to update story ${localStory.story_id} instead...`);
+              const updateResponse = await fetch(`/api/user-stories/update-api/${localStory.story_id}/`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(storyData)
+              });
+              
+              if (updateResponse.ok) {
+                console.log(`✅ Updated story ${localStory.story_id} in database`);
+                syncedCount++;
+              } else {
+                throw new Error(`Update failed: ${await updateResponse.text()}`);
+              }
+            } catch (updateError) {
+              console.error(`Failed to update duplicate story ${localStory.story_id}:`, updateError);
+            }
+          } else {
+            errors.push(`Failed to create story ${localStory.story_id}: ${errorText}`);
+            console.error(`❌ Failed to create story ${localStory.story_id}:`, errorText);
+          }
+        }
+      } catch (err) {
+        console.error(`Error syncing story ${localStory.story_id}:`, err);
+        errors.push(`Error syncing story ${localStory.story_id}: ${err}`);
+      }
+    }
+
+    console.log(`📊 Sync summary: ${syncedCount} synced, ${duplicateCount} duplicates skipped`);
+
+    if (errors.length > 0) {
+      console.warn(`Sync completed with ${errors.length} errors:`, errors);
+    }
+
+    // Save sync timestamp
+    if (syncedCount > 0) {
+      this.setLastSyncTime(projectId);
+    }
+
+    const message = duplicateCount > 0 
+      ? `Synced ${syncedCount} new stories (${duplicateCount} duplicates skipped)`
+      : `Successfully synced ${syncedCount} stories to database`;
+
+    return {
+      success: errors.length === 0,
+      syncedCount,
+      message: errors.length === 0 
+        ? message
+        : `${message} with ${errors.length} errors`
+    };
+
+  } catch (error) {
+    console.error('Error syncing local to database:', error);
+    return {
+      success: false,
+      syncedCount: 0,
+      message: `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
   }
+}
 
   // Get last sync timestamp
   getLastSyncTime(projectId: string): string | null {
@@ -561,64 +610,95 @@ export class UserStoryService {
 
   // FIXED: Save API stories to localStorage
   private saveStoriesToLocalStorage(apiStories: any[], projectId: string): void {
-    try {
-      console.log('💾 Saving API stories to localStorage');
-      console.log('🔍 API Stories structure:', apiStories.length > 0 ? apiStories[0] : 'No stories');
-      
-      // Clear existing stories for this project
-      localStorageService.clearProjectStories(projectId);
-      console.log(`🧹 Cleared existing stories for project ${projectId}`);
+  try {
+    console.log('💾 Saving API stories to localStorage');
+    console.log('🔍 API Stories structure:', apiStories.length > 0 ? apiStories[0] : 'No stories');
+    
+    // Get existing story IDs for this project to avoid duplicates
+    const existingStories = localStorageService.getUserStoriesByProject(projectId);
+    const existingIds = new Set(existingStories.map(s => s.story_id));
+    
+    console.log(`📊 Found ${existingIds.size} existing local stories for project ${projectId}`);
 
-      // Save new stories
-      let savedCount = 0;
-      let errorCount = 0;
-      
-      apiStories.forEach((apiStory: any, index: number) => {
-        try {
-          // Debug each story
-          console.log(`📝 Processing story ${index}:`, apiStory);
+    // Save new stories
+    let savedCount = 0;
+    let duplicateCount = 0;
+    let errorCount = 0;
+    
+    apiStories.forEach((apiStory: any, index: number) => {
+      try {
+        // Handle different API response formats
+        const storyText = apiStory.story_text || apiStory.text || '';
+        const storyId = apiStory.story_id || apiStory.id || this.generateUniqueStoryId(projectId, existingIds);
+        
+        // Check if this ID already exists locally
+        if (existingIds.has(storyId)) {
+          console.log(`⏭️ Story ID ${storyId} already exists locally, generating new ID...`);
           
-          // Handle different API response formats
-          const storyText = apiStory.story_text || apiStory.text || '';
-          const storyId = apiStory.story_id || apiStory.id || `US_${Date.now()}_${index}`;
+          // Generate a new unique ID
+          const newStoryId = this.generateUniqueStoryId(projectId, existingIds);
+          console.log(`🔄 Using new ID: ${newStoryId} instead of ${storyId}`);
           
-          const localStory: Omit<LocalUserStory, 'story_id' | 'created_at' | 'updated_at'> = {
-            project_id: projectId,
-            story_text: storyText,
-            role: apiStory.role || 'User',
-            action: apiStory.action || this.extractActionFromStory(storyText),
-            benefit: apiStory.benefit || this.extractBenefitFromStory(storyText),
-            feature: apiStory.feature || 'General',
-            acceptance_criteria: apiStory.acceptance_criteria || [],
-            priority: (apiStory.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium',
-            story_points: apiStory.story_points || 0,
-            status: (apiStory.status as 'draft' | 'reviewed' | 'approved' | 'implemented') || 'draft',
-            generated_by_llm: apiStory.generated_by_llm !== undefined ? apiStory.generated_by_llm : true,
-            iteration: apiStory.iteration || 1
-          };
-
-          // Create with custom ID
-          const savedStory = localStorageService.createUserStory(localStory, storyId);
-          if (savedStory) {
-            savedCount++;
-            console.log(`✅ Saved story: ${storyId}`);
-          }
-        } catch (err) {
-          console.error(`❌ Error saving story ${index}:`, err);
-          errorCount++;
+          // Update the existing IDs set
+          existingIds.add(newStoryId);
+          
+          // Use the new ID
+          apiStory.story_id = newStoryId;
+        } else {
+          existingIds.add(storyId);
         }
-      });
-      
-      console.log(`🎉 Successfully saved ${savedCount}/${apiStories.length} stories to localStorage (${errorCount} errors)`);
-      
-      // Verify save
-      const verifyStories = localStorageService.getUserStoriesByProject(projectId);
-      console.log(`📊 Verification: Now have ${verifyStories.length} stories in localStorage for project ${projectId}`);
-      
-    } catch (error) {
-      console.error('❌ Failed to save stories to localStorage:', error);
-    }
+
+        const localStory: Omit<LocalUserStory, 'story_id' | 'created_at' | 'updated_at'> = {
+          project_id: projectId,
+          story_text: storyText,
+          role: apiStory.role || 'User',
+          action: apiStory.action || this.extractActionFromStory(storyText),
+          benefit: apiStory.benefit || this.extractBenefitFromStory(storyText),
+          feature: apiStory.feature || 'General',
+          acceptance_criteria: apiStory.acceptance_criteria || [],
+          priority: (apiStory.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium',
+          story_points: apiStory.story_points || 0,
+          status: (apiStory.status as 'draft' | 'reviewed' | 'approved' | 'implemented') || 'draft',
+          generated_by_llm: apiStory.generated_by_llm !== undefined ? apiStory.generated_by_llm : true,
+          iteration: apiStory.iteration || 1
+        };
+
+        // Create with custom ID
+        const savedStory = localStorageService.createUserStory(localStory, apiStory.story_id || storyId);
+        if (savedStory) {
+          savedCount++;
+          console.log(`✅ Saved story: ${savedStory.story_id}`);
+        }
+      } catch (err) {
+        console.error(`❌ Error saving story ${index}:`, err);
+        errorCount++;
+      }
+    });
+    
+    console.log(`🎉 Successfully saved ${savedCount}/${apiStories.length} stories to localStorage (${duplicateCount} duplicates handled, ${errorCount} errors)`);
+    
+    // Verify save
+    const verifyStories = localStorageService.getUserStoriesByProject(projectId);
+    console.log(`📊 Verification: Now have ${verifyStories.length} stories in localStorage for project ${projectId}`);
+    
+  } catch (error) {
+    console.error('❌ Failed to save stories to localStorage:', error);
   }
+}
+
+// Add this helper method to generate unique story IDs
+private generateUniqueStoryId(projectId: string, existingIds: Set<string>): string {
+  const timestamp = Date.now().toString().slice(-6);
+  const baseId = `US_${timestamp}`;
+  
+  // If base ID exists, add random suffix
+  if (existingIds.has(baseId)) {
+    const randomSuffix = Math.random().toString(36).substring(2, 6);
+    return `${baseId}_${randomSuffix}`;
+  }
+  
+  return baseId;
+}
 
   // Generate user stories offline (template-based)
   generateUserStoriesOffline(project: LocalProject): LocalUserStory[] {

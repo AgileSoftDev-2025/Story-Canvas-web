@@ -47,7 +47,7 @@ class WireframeAPIService {
     }
   }
 
-  // Sync database wireframes to localStorage WITHOUT timestamp saving
+  // Sync database wireframes to localStorage (local_wireframes only)
   async syncDatabaseToLocalStorage(projectId: string, token: string): Promise<{
     success: boolean;
     syncedCount: number;
@@ -81,7 +81,7 @@ class WireframeAPIService {
       }
 
       // 2. Clear existing local wireframes for this project
-      this.clearProjectWireframes(projectId);
+      localStorageService.clearProjectWireframes(projectId);
       console.log(`🧹 Cleared existing local wireframes for project ${projectId}`);
 
       // 3. Convert database wireframes to localStorage format and save
@@ -113,12 +113,12 @@ class WireframeAPIService {
         }
       });
 
-      console.log(`✅ Successfully synced ${savedCount} wireframes to localStorage`);
+      console.log(`✅ Successfully synced ${savedCount} wireframes to local_wireframes`);
       
       return {
         success: true,
         syncedCount: savedCount,
-        message: `Synced ${savedCount} wireframes from database to localStorage`,
+        message: `Synced ${savedCount} wireframes from database to local_wireframes`,
         databaseCount
       };
 
@@ -133,7 +133,7 @@ class WireframeAPIService {
     }
   }
 
-  // Sync local wireframes to database WITHOUT timestamp saving
+  // Sync local wireframes to database
   async syncLocalToDatabase(projectId: string, token: string): Promise<{
     success: boolean;
     syncedCount: number;
@@ -150,12 +150,11 @@ class WireframeAPIService {
         };
       }
 
-      console.log(`📤 Syncing ${localWireframes.length} local wireframes to database...`);
+      console.log(`📤 Syncing ${localWireframes.length} local wireframes from local_wireframes to database...`);
 
       let syncedCount = 0;
       let errors: string[] = [];
 
-      // Use bulk sync endpoint for efficiency
       const wireframesData = localWireframes.map(wf => ({
         wireframe_id: wf.wireframe_id,
         project_id: projectId,
@@ -193,7 +192,7 @@ class WireframeAPIService {
         const result = await response.json();
         if (result.success) {
           syncedCount = result.stats?.total || wireframesData.length;
-          console.log(`✅ Successfully synced ${syncedCount} wireframes to database`);
+          console.log(`✅ Successfully synced ${syncedCount} wireframes to database from local_wireframes`);
         } else {
           errors.push(result.error || 'Bulk sync failed');
         }
@@ -210,7 +209,7 @@ class WireframeAPIService {
         success: errors.length === 0,
         syncedCount,
         message: errors.length === 0 
-          ? `Successfully synced ${syncedCount} wireframes to database`
+          ? `Successfully synced ${syncedCount} wireframes to database from local_wireframes`
           : `Synced ${syncedCount} wireframes with ${errors.length} errors`
       };
 
@@ -268,7 +267,7 @@ class WireframeAPIService {
     }
   }
 
-  // Get wireframe sync status WITHOUT localStorage timestamps
+  // Get wireframe sync status
   async getWireframeSyncStatus(projectId: string, token: string): Promise<{
     success: boolean;
     sync_status: any;
@@ -315,21 +314,7 @@ class WireframeAPIService {
     }
   }
 
-  // Clear wireframes for a project
-  private clearProjectWireframes(projectId: string): void {
-    try {
-      const allWireframes = localStorageService.getAllWireframes();
-      const filteredWireframes = allWireframes.filter(wf => wf.project_id !== projectId);
-      
-      // Save back to localStorage
-      localStorage.setItem('local_wireframes', JSON.stringify(filteredWireframes));
-      console.log(`🧹 Cleared wireframes for project ${projectId}`);
-    } catch (error) {
-      console.error('Error clearing project wireframes:', error);
-    }
-  }
-
-  // Two-way sync wireframes WITHOUT timestamp saving
+  // Two-way sync wireframes
   async twoWaySyncWireframes(projectId: string, token: string): Promise<{
     success: boolean;
     syncedCount: number;
@@ -374,8 +359,8 @@ class WireframeAPIService {
       const data = await response.json();
       
       if (data.success && data.data) {
-        // Clear and save merged wireframes
-        this.clearProjectWireframes(projectId);
+        // Clear and save merged wireframes using localStorageService
+        localStorageService.clearProjectWireframes(projectId);
         let savedCount = 0;
         
         data.data.forEach((wireframe: any) => {

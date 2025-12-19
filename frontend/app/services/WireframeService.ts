@@ -29,12 +29,14 @@ interface EnhancedWireframe extends LocalWireframe {
 class WireframeService {
   private static instance: WireframeService;
   
-  // Rate limiting configuration
+  // Rate limiting configuration - ALIGNED WITH REPLICATE'S FREE TIER
   private readonly RATE_LIMIT_CONFIG = {
-    maxRequestsPerMinute: 6, // Replicate free tier limit
-    minDelayBetweenRequests: 10000, // 10 seconds minimum between requests
-    burstLimit: 1, // Burst requests allowed
-    maxRetries: 3, // Max retries on rate limit
+    maxRequestsPerMinute: 5, // Reduced to be safe
+    minDelayBetweenRequests: 12000, // 12 seconds minimum between requests
+    burstLimit: 1, // Only 1 burst request allowed
+    maxRetries: 10, // INCREASED RETRIES: Keep retrying on rate limits
+    retryDelayBase: 10000, // Start with 10 seconds delay
+    retryDelayMax: 60000, // Max 60 seconds delay
   };
 
   // Request tracking
@@ -57,25 +59,31 @@ class WireframeService {
     const now = Date.now();
     const oneMinuteAgo = now - 60000;
     
+    // Clean up old requests
     this.requestQueue = this.requestQueue.filter(req => req.timestamp > oneMinuteAgo);
     
+    // If we've reached the minute limit, wait for the oldest request to age out
     if (this.requestQueue.length >= this.RATE_LIMIT_CONFIG.maxRequestsPerMinute) {
       const oldestRequest = this.requestQueue[0];
       const timeToWait = Math.max(0, (oldestRequest.timestamp + 60000) - now);
       
       if (timeToWait > 0) {
-        console.log(`⏳ Rate limit reached. Waiting ${timeToWait / 1000} seconds...`);
+        console.log(`⏳ Rate limit reached (${this.requestQueue.length}/${this.RATE_LIMIT_CONFIG.maxRequestsPerMinute}). Waiting ${Math.ceil(timeToWait / 1000)} seconds...`);
         await new Promise(resolve => setTimeout(resolve, timeToWait + 1000));
       }
     }
     
-    const recentRequests = this.requestQueue.filter(req => req.timestamp > now - 5000);
-    if (recentRequests.length >= this.RATE_LIMIT_CONFIG.burstLimit) {
+    // Check burst limit (last 5 seconds)
+    const fiveSecondsAgo = now - 5000;
+    const recentBurstRequests = this.requestQueue.filter(req => req.timestamp > fiveSecondsAgo);
+    
+    if (recentBurstRequests.length >= this.RATE_LIMIT_CONFIG.burstLimit) {
       const delay = this.RATE_LIMIT_CONFIG.minDelayBetweenRequests;
       console.log(`⏳ Burst limit reached. Waiting ${delay / 1000} seconds...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
     
+    // Add this request to the queue
     this.requestQueue.push({
       timestamp: Date.now(),
       projectId: '',
@@ -85,21 +93,255 @@ class WireframeService {
 
   private async callWithRateLimit<T>(
     apiCall: () => Promise<T>,
+    operationName: string = 'API call',
     retryCount: number = 0
   ): Promise<T> {
     try {
       await this.waitForRateLimit();
+      console.log(`🔄 ${operationName} attempt ${retryCount + 1}`);
       return await apiCall();
     } catch (error: any) {
-      if (error.status === 429 && retryCount < this.RATE_LIMIT_CONFIG.maxRetries) {
-        const waitTime = Math.pow(2, retryCount) * 5000;
-        console.log(`🔄 Rate limited. Retry ${retryCount + 1}/${this.RATE_LIMIT_CONFIG.maxRetries} in ${waitTime / 1000}s`);
+      // Handle rate limiting (429 errors)
+      if (error.status === 429 || (error.message && error.message.includes('429')) || 
+          (error.message && error.message.includes('throttled'))) {
+        
+        if (retryCount >= this.RATE_LIMIT_CONFIG.maxRetries) {
+          console.error(`❌ Max retries (${this.RATE_LIMIT_CONFIG.maxRetries}) reached for ${operationName}`);
+          throw new Error(`Rate limit exceeded after ${this.RATE_LIMIT_CONFIG.maxRetries} retries. Please wait a moment and try again.`);
+        }
+        
+        // Exponential backoff with jitter
+        const baseDelay = this.RATE_LIMIT_CONFIG.retryDelayBase;
+        const maxDelay = this.RATE_LIMIT_CONFIG.retryDelayMax;
+        const exponentialDelay = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+        const jitter = Math.random() * 1000; // Add up to 1 second jitter
+        const waitTime = exponentialDelay + jitter;
+        
+        console.log(`🔄 Rate limited on ${operationName}. Retry ${retryCount + 1}/${this.RATE_LIMIT_CONFIG.maxRetries} in ${Math.ceil(waitTime / 1000)}s`);
         
         await new Promise(resolve => setTimeout(resolve, waitTime));
-        return this.callWithRateLimit(apiCall, retryCount + 1);
+        
+        // Clear queue to reset rate limit tracking
+        this.requestQueue = this.requestQueue.slice(-2); // Keep only last 2 requests
+        
+        return this.callWithRateLimit(apiCall, operationName, retryCount + 1);
       }
+      
+      // Handle timeouts
+      if (error.message && (error.message.includes('timeout') || error.message.includes('timed out'))) {
+        if (retryCount >= 3) { // Max 3 retries for timeouts
+          throw new Error(`Operation timed out after ${retryCount + 1} attempts`);
+        }
+        
+        const timeoutDelay = 5000 * (retryCount + 1);
+        console.log(`⏳ Timeout on ${operationName}. Retry ${retryCount + 1}/3 in ${timeoutDelay / 1000}s`);
+        await new Promise(resolve => setTimeout(resolve, timeoutDelay));
+        return this.callWithRateLimit(apiCall, operationName, retryCount + 1);
+      }
+      
+      // For other errors, throw immediately (no retry)
       throw error;
     }
+  }
+
+  // ===== NO FALLBACK GENERATION METHODS =====
+
+  async generateWireframesOnlineWithRetry(
+    projectId: string, 
+    token: string, 
+    maxRetries: number = 10
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: LocalWireframe[];
+    count?: number;
+    error?: string;
+  }> {
+    console.log('🚀 Starting LLM-based wireframe generation with NO FALLBACK...');
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Generation attempt ${attempt}/${maxRetries}`);
+        
+        const result = await this.callWithRateLimit(
+          () => this.generateWireframesOnline(projectId, token),
+          'Wireframe generation',
+          attempt - 1
+        );
+        
+        if (result.success) {
+          console.log(`✅ Wireframe generation successful on attempt ${attempt}`);
+          return result;
+        }
+        
+        // If not successful but not due to rate limiting, try again
+        console.log(`🔄 Generation attempt ${attempt} failed: ${result.message}`);
+        
+        // Wait between attempts
+        if (attempt < maxRetries) {
+          const waitTime = 5000 * attempt; // Exponential backoff: 5s, 10s, 15s...
+          console.log(`⏳ Waiting ${waitTime / 1000}s before next attempt...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+        
+      } catch (error) {
+        console.error(`❌ Generation attempt ${attempt} error:`, error);
+        
+        if (attempt === maxRetries) {
+          throw new Error(`Wireframe generation failed after ${maxRetries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+        
+        // Wait before retry
+        const waitTime = 5000 * attempt;
+        console.log(`⏳ Waiting ${waitTime / 1000}s before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+    
+    throw new Error(`Wireframe generation failed after ${maxRetries} attempts`);
+  }
+
+  async generateWireframesWithSync(projectId: string, token?: string | null, projectData?: LocalProject): Promise<{
+    success: boolean;
+    message: string;
+    data?: LocalWireframe[];
+    count?: number;
+    source?: string;
+    error?: string;
+    autoSynced?: boolean;
+  }> {
+    try {
+      const isAuthenticated = !!token;
+      
+      if (isAuthenticated && token) {
+        console.log('🔄 Authenticated: Performing auto-sync on entry...');
+        const autoSyncResult = await this.callWithRateLimit(() => 
+          this.autoSyncOnEntry(projectId, token)
+        );
+        
+        if (autoSyncResult.success && autoSyncResult.syncedFromDb && autoSyncResult.wireframeCount && autoSyncResult.wireframeCount > 0) {
+          console.log('✅ Using auto-synced wireframes from database');
+          const wireframes = localStorageService.getWireframesByProject(projectId);
+          return {
+            success: true,
+            message: `Auto-loaded ${wireframes.length} wireframes from database`,
+            data: wireframes,
+            count: wireframes.length,
+            source: 'database',
+            autoSynced: true
+          };
+        }
+      }
+      
+      const existingWireframes = localStorageService.getWireframesByProject(projectId);
+      if (existingWireframes.length > 0) {
+        console.log(`ℹ️ Found ${existingWireframes.length} existing local wireframes`);
+        return {
+          success: true,
+          message: `Loaded ${existingWireframes.length} existing wireframes`,
+          data: existingWireframes,
+          count: existingWireframes.length,
+          source: 'local_cache',
+          autoSynced: false
+        };
+      }
+      
+      console.log('🚀 NO wireframes found. Starting LLM-based generation WITHOUT FALLBACK...');
+      
+      if (isAuthenticated && token) {
+        // USE THE NO-FALLBACK VERSION
+        const generationResult = await this.generateWireframesOnlineWithRetry(projectId, token);
+        
+        if (generationResult.success && generationResult.data && generationResult.data.length > 0) {
+          console.log('🔄 Auto-syncing newly generated wireframes to database...');
+          const autoSyncResult = await this.callWithRateLimit(() => 
+            this.autoSyncAfterRegeneration(projectId, token, generationResult.data?.length || 0)
+          );
+          
+          if (autoSyncResult.success) {
+            console.log(`✅ Auto-synced ${autoSyncResult.syncedCount} wireframes to database`);
+            generationResult.message = `${generationResult.message} (Auto-synced to database)`;
+          } else {
+            console.warn('⚠️ Auto-sync after generation failed:', autoSyncResult.message);
+          }
+        }
+        
+        return {
+          ...generationResult,
+          autoSynced: true
+        };
+      } else {
+        // OFFLINE MODE - USE LOCAL API WITH RETRIES (NO TEMPLATE FALLBACK)
+        console.log('🟡 Offline mode: Using local API with retries');
+        const generationResult = await this.generateWireframesOfflineAPIWithRetry(projectId, projectData);
+        
+        return {
+          ...generationResult,
+          autoSynced: false
+        };
+      }
+      
+    } catch (error) {
+      console.error('❌ Wireframe generation failed completely (NO FALLBACK):', error);
+      return {
+        success: false,
+        message: `LLM-based generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        autoSynced: false
+      };
+    }
+  }
+
+  async generateWireframesOfflineAPIWithRetry(
+    projectId: string, 
+    projectData?: LocalProject,
+    maxRetries: number = 10
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: LocalWireframe[];
+    count?: number;
+    error?: string;
+  }> {
+    console.log('🚀 Starting local API wireframe generation with NO FALLBACK...');
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Local API generation attempt ${attempt}/${maxRetries}`);
+        
+        const result = await this.callWithRateLimit(
+          () => this.generateWireframesOfflineAPI(projectId, projectData),
+          'Local API wireframe generation',
+          attempt - 1
+        );
+        
+        if (result.success) {
+          console.log(`✅ Local API wireframe generation successful on attempt ${attempt}`);
+          return result;
+        }
+        
+        console.log(`🔄 Local API generation attempt ${attempt} failed: ${result.message}`);
+        
+        if (attempt < maxRetries) {
+          const waitTime = 5000 * attempt;
+          console.log(`⏳ Waiting ${waitTime / 1000}s before next attempt...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+        
+      } catch (error) {
+        console.error(`❌ Local API generation attempt ${attempt} error:`, error);
+        
+        if (attempt === maxRetries) {
+          throw new Error(`Local API wireframe generation failed after ${maxRetries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+        
+        const waitTime = 5000 * attempt;
+        console.log(`⏳ Waiting ${waitTime / 1000}s before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+    
+    throw new Error(`Local API wireframe generation failed after ${maxRetries} attempts`);
   }
 
   async autoSyncAfterRegeneration(projectId: string, token: string, newlyGeneratedCount: number): Promise<{
@@ -110,7 +352,6 @@ class WireframeService {
     try {
       console.log(`🔄 Auto-syncing ${newlyGeneratedCount} newly generated wireframes to database...`);
       
-      // First, sync all local wireframes to database
       const syncResult = await this.callWithRateLimit(() => 
         wireframeAPIService.syncLocalToDatabase(projectId, token)
       );
@@ -138,7 +379,6 @@ class WireframeService {
     message: string;
     wireframeCount?: number;
   }> {
-    // If no token, we're offline
     if (!token) {
       console.log('🟡 OFFLINE: No token, skipping database sync');
       return {
@@ -151,13 +391,11 @@ class WireframeService {
     try {
       console.log('🔄 Starting automatic wireframe sync on page entry...');
       
-      // First check if wireframes exist in database
       const checkResult = await this.callWithRateLimit(() => 
         wireframeAPIService.checkWireframesExist(projectId, token)
       );
       
       if (checkResult.success && checkResult.exists && checkResult.wireframe_count > 0) {
-        // Database has wireframes, sync FROM database TO localStorage
         const syncResult = await this.callWithRateLimit(() => 
           wireframeAPIService.syncDatabaseToLocalStorage(projectId, token)
         );
@@ -175,7 +413,6 @@ class WireframeService {
         }
       }
       
-      // If database empty or sync failed, check if we have local data to sync TO database
       const localWireframes = localStorageService.getWireframesByProject(projectId);
       if (localWireframes.length > 0) {
         console.log(`📤 Auto-syncing ${localWireframes.length} local wireframes to database...`);
@@ -191,7 +428,6 @@ class WireframeService {
         };
       }
       
-      // No wireframes anywhere
       return {
         success: true,
         syncedFromDb: false,
@@ -211,14 +447,12 @@ class WireframeService {
 
   // ===== SYNC METHODS =====
   
-  // Unified sync method for wireframes
   async syncWireframes(projectId: string, token?: string | null): Promise<{
     success: boolean;
     syncedFromDb: boolean;
     message: string;
     wireframeCount?: number;
   }> {
-    // If no token, we're offline
     if (!token) {
       console.log('🟡 OFFLINE: No token, skipping database sync for wireframes');
       return {
@@ -231,13 +465,11 @@ class WireframeService {
     try {
       console.log('🔄 Starting wireframes sync...');
       
-      // First check if wireframes exist in database
       const checkResult = await this.callWithRateLimit(() => 
         wireframeAPIService.checkWireframesExist(projectId, token)
       );
       
       if (checkResult.success && checkResult.exists && checkResult.wireframe_count > 0) {
-        // Database has wireframes, sync FROM database TO localStorage
         const syncResult = await this.callWithRateLimit(() => 
           wireframeAPIService.syncDatabaseToLocalStorage(projectId, token)
         );
@@ -257,7 +489,6 @@ class WireframeService {
         }
       }
       
-      // If database empty or sync failed, check local data
       const localWireframes = localStorageService.getWireframesByProject(projectId);
       if (localWireframes.length > 0) {
         console.log(`📤 Syncing ${localWireframes.length} local wireframes to database...`);
@@ -273,7 +504,6 @@ class WireframeService {
         };
       }
       
-      // No wireframes anywhere
       return {
         success: true,
         syncedFromDb: false,
@@ -291,300 +521,9 @@ class WireframeService {
     }
   }
 
-  // Generate wireframes with sync logic
-  async generateWireframesWithSync(projectId: string, token?: string | null, projectData?: LocalProject): Promise<{
-    success: boolean;
-    message: string;
-    data?: LocalWireframe[];
-    count?: number;
-    source?: string;
-    error?: string;
-    autoSynced?: boolean;
-  }> {
-    try {
-      const isAuthenticated = !!token;
-      
-      // STEP 1: Auto-sync on entry (if authenticated)
-      if (isAuthenticated && token) {
-        console.log('🔄 Authenticated: Performing auto-sync on entry...');
-        const autoSyncResult = await this.callWithRateLimit(() => 
-          this.autoSyncOnEntry(projectId, token)
-        );
-        
-        if (autoSyncResult.success && autoSyncResult.syncedFromDb && autoSyncResult.wireframeCount && autoSyncResult.wireframeCount > 0) {
-          // If we got data from database, return it
-          console.log('✅ Using auto-synced wireframes from database');
-          const wireframes = localStorageService.getWireframesByProject(projectId);
-          return {
-            success: true,
-            message: `Auto-loaded ${wireframes.length} wireframes from database`,
-            data: wireframes,
-            count: wireframes.length,
-            source: 'database',
-            autoSynced: true
-          };
-        }
-      }
-      
-      // STEP 2: Check if we already have wireframes locally
-      const existingWireframes = localStorageService.getWireframesByProject(projectId);
-      if (existingWireframes.length > 0) {
-        console.log(`ℹ️ Found ${existingWireframes.length} existing local wireframes`);
-        return {
-          success: true,
-          message: `Loaded ${existingWireframes.length} existing wireframes`,
-          data: existingWireframes,
-          count: existingWireframes.length,
-          source: 'local_cache',
-          autoSynced: false
-        };
-      }
-      
-      // STEP 3: If no wireframes exist, generate new ones
-      console.log('🔄 No wireframes found, generating new...');
-      
-      if (isAuthenticated && token) {
-        // Generate via API with rate limiting
-        const generationResult = await this.callWithRateLimit(() => 
-          this.generateWireframesOnline(projectId, token)
-        );
-        
-        // STEP 4: Auto-sync to database after generation
-        if (generationResult.success && generationResult.data && generationResult.data.length > 0) {
-          console.log('🔄 Auto-syncing newly generated wireframes to database...');
-          const autoSyncResult = await this.callWithRateLimit(() => 
-            this.autoSyncAfterRegeneration(projectId, token, generationResult.data?.length || 0)
-          );
-          
-          if (autoSyncResult.success) {
-            console.log(`✅ Auto-synced ${autoSyncResult.syncedCount} wireframes to database`);
-            generationResult.message = `${generationResult.message} (Auto-synced to database)`;
-          } else {
-            console.warn('⚠️ Auto-sync after generation failed:', autoSyncResult.message);
-          }
-        }
-        
-        return {
-          ...generationResult,
-          autoSynced: true
-        };
-      } else {
-        // Generate locally
-        const project = projectData || localStorageService.getProject(projectId);
-        if (!project) {
-          throw new Error('Project not found');
-        }
-        
-        const userStories = localStorageService.getUserStoriesByProject(projectId);
-        if (!userStories || userStories.length === 0) {
-          throw new Error('No user stories found. Generate user stories first.');
-        }
-        
-        const wireframes = this.generateWireframesOffline(project, userStories);
-        
-        return {
-          success: true,
-          message: `Generated ${wireframes.length} wireframes locally`,
-          data: wireframes,
-          count: wireframes.length,
-          source: 'offline_generated',
-          autoSynced: false
-        };
-      }
-      
-    } catch (error) {
-      console.error('Wireframe generation failed:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        autoSynced: false
-      };
-    }
-  }
+  // REMOVED THE OLD generateWireframes METHOD THAT HAD FALLBACK
+  // Use generateWireframesWithSync instead
 
-  // Two-way sync wireframes
-  async twoWaySyncWireframes(projectId: string, token: string): Promise<{
-    success: boolean;
-    syncedCount: number;
-    message: string;
-  }> {
-    try {
-      console.log('🔄 Starting two-way wireframe sync...');
-      
-      const result = await this.callWithRateLimit(() => 
-        wireframeAPIService.twoWaySyncWireframes(projectId, token)
-      );
-      
-      if (result.success) {
-        console.log(`✅ Two-way sync completed: ${result.message}`);
-        return {
-          success: true,
-          syncedCount: result.syncedCount,
-          message: result.message
-        };
-      } else {
-        console.warn('⚠️ Two-way sync failed:', result.message);
-        return {
-          success: false,
-          syncedCount: 0,
-          message: result.message
-        };
-      }
-    } catch (error) {
-      console.error('Two-way sync failed:', error);
-      return {
-        success: false,
-        syncedCount: 0,
-        message: `Two-way sync error: ${error instanceof Error ? error.message : 'Unknown error'}`
-      };
-    }
-  }
-
-  // Get sync status
-  async getWireframeSyncStatus(projectId: string, token?: string | null): Promise<{
-    success: boolean;
-    sync_status: any;
-    message: string;
-  }> {
-    if (!token) {
-      const localWireframes = localStorageService.getWireframesByProject(projectId);
-      return {
-        success: true,
-        sync_status: {
-          is_synced: true,
-          database: { wireframe_count: 0, last_updated: null },
-          local: { 
-            wireframe_count: localWireframes.length,
-            last_updated: localWireframes.length > 0 
-              ? new Date(Math.max(...localWireframes.map(w => new Date(w.updated_at || w.created_at).getTime()))).toISOString()
-              : null
-          },
-          needs_sync: false,
-          mode: 'offline'
-        },
-        message: 'Offline mode - sync not available'
-      };
-    }
-
-    try {
-      return await this.callWithRateLimit(() => 
-        wireframeAPIService.getWireframeSyncStatus(projectId, token)
-      );
-    } catch (error) {
-      console.error('Error getting sync status:', error);
-      const localWireframes = localStorageService.getWireframesByProject(projectId);
-      return {
-        success: false,
-        sync_status: {
-          is_synced: false,
-          database: { wireframe_count: 0, last_updated: null },
-          local: { 
-            wireframe_count: localWireframes.length,
-            last_updated: localWireframes.length > 0 
-              ? new Date(Math.max(...localWireframes.map(w => new Date(w.updated_at || w.created_at).getTime()))).toISOString()
-              : null
-          },
-          needs_sync: false,
-          mode: 'error'
-        },
-        message: `Failed to get sync status: ${error instanceof Error ? error.message : 'Unknown error'}`
-      };
-    }
-  }
-  
-  // Get wireframes with enhanced display data for the UI
-  async getWireframesForDisplay(projectId: string): Promise<EnhancedWireframe[]> {
-    try {
-      const wireframes = localStorageService.getWireframesByProject(projectId);
-      
-      return wireframes.map(wireframe => this.enhanceWireframeWithDisplayData(wireframe));
-    } catch (error) {
-      console.error('Error getting wireframes for display:', error);
-      return [];
-    }
-  }
-
-  // Get detailed wireframe information including full LLM response
-  async getWireframeDetails(wireframeId: string): Promise<EnhancedWireframe> {
-    try {
-      const allWireframes = localStorageService.getAllWireframes();
-      const wireframe = allWireframes.find(wf => wf.wireframe_id === wireframeId);
-      
-      if (!wireframe) {
-        throw new Error(`Wireframe with ID ${wireframeId} not found`);
-      }
-
-      return this.enhanceWireframeWithDisplayData(wireframe, true);
-    } catch (error) {
-      console.error('Error getting wireframe details:', error);
-      throw error;
-    }
-  }
-
-  // Enhance wireframe with display and debug information
-  private enhanceWireframeWithDisplayData(wireframe: LocalWireframe, includeFullResponse: boolean = false): EnhancedWireframe {
-    const htmlContent = wireframe.html_content || '';
-    const hasValidStructure = this.validateHTMLStructure(htmlContent);
-    
-    const llmResponsePreview = this.extractLLMResponsePreview(wireframe);
-    const usedRag = wireframe.generated_with_rag || false;
-    const usedFallback = !usedRag && (wireframe.is_local || false);
-    
-    const uiPatternsUsed = this.countUIPatterns(htmlContent);
-    const projectPatternsUsed = this.countProjectPatterns(wireframe);
-    
-    const enhancedWireframe: EnhancedWireframe = {
-      ...wireframe,
-      display_data: {
-        page_name: wireframe.page_name,
-        page_type: wireframe.page_type,
-        html_preview: this.generateHTMLPreview(htmlContent),
-        has_valid_structure: hasValidStructure,
-        stories_count: wireframe.stories_count || 0,
-        features_count: wireframe.features_count || 0,
-        generated_at: wireframe.generated_at || wireframe.created_at,
-        debug_status: hasValidStructure ? 'success' : 'invalid_html',
-        llm_response_preview: llmResponsePreview,
-        llm_response_length: llmResponsePreview.length,
-        html_length: htmlContent.length,
-        used_rag: usedRag,
-        used_fallback: usedFallback,
-        generation_error: this.extractGenerationError(wireframe),
-        ui_patterns_used: uiPatternsUsed,
-        project_patterns_used: projectPatternsUsed
-      }
-    };
-    
-    if (includeFullResponse) {
-      enhancedWireframe.full_llm_response = this.extractFullLLMResponse(wireframe);
-    }
-    
-    return enhancedWireframe;
-  }
-
-  // Unified method that handles both online and offline modes
-  async generateWireframes(projectId: string, projectData?: LocalProject): Promise<{
-    success: boolean;
-    message: string;
-    data?: LocalWireframe[];
-    count?: number;
-    error?: string;
-  }> {
-    const isAuthenticated = !!localStorage.getItem('access_token');
-    
-    if (isAuthenticated) {
-      console.log('🟢 ONLINE MODE: Using authenticated API for wireframes');
-      return await this.callWithRateLimit(() => 
-        this.generateWireframesOnline(projectId)
-      );
-    } else {
-      console.log('🟡 OFFLINE MODE: Using local project API for wireframes');
-      return await this.generateWireframesOfflineAPI(projectId, projectData);
-    }
-  }
-
-  // Generate wireframes via API (authenticated)
   async generateWireframesOnline(projectId: string, token?: string): Promise<{
     success: boolean;
     message: string;
@@ -597,7 +536,7 @@ class WireframeService {
 
       const authToken = token || localStorage.getItem('access_token');
       if (!authToken) {
-        console.warn('No authentication token found, using offline mode');
+        console.warn('No authentication token found');
         throw new Error('No authentication token found');
       }
 
@@ -615,7 +554,6 @@ class WireframeService {
         const errorText = await response.text();
         console.error('Wireframe API Error:', errorText);
         
-        // Check if it's a rate limit error
         if (response.status === 429) {
           throw { 
             status: 429, 
@@ -633,7 +571,6 @@ class WireframeService {
         throw new Error(data.error || data.message || 'Wireframe generation failed on server');
       }
 
-      // Save wireframes to localStorage for consistency
       if (data.wireframes && Array.isArray(data.wireframes)) {
         this.saveWireframesToLocalStorage(data.wireframes, projectId);
       }
@@ -646,15 +583,10 @@ class WireframeService {
       };
     } catch (error) {
       console.error('Error generating wireframes online:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      throw error; // RE-THROW instead of returning error - let caller handle retries
     }
   }
 
-  // Generate wireframes via API for local projects (no auth required)
   async generateWireframesOfflineAPI(projectId: string, projectData?: LocalProject): Promise<{
     success: boolean;
     message: string;
@@ -734,7 +666,7 @@ class WireframeService {
 
       if (data.wireframes && Array.isArray(data.wireframes)) {
         this.saveWireframesToLocalStorage(data.wireframes, projectId);
-        console.log(`✅ Saved ${data.wireframes.length} wireframes to localStorage`);
+        console.log(`✅ Saved ${data.wireframes.length} wireframes to local_wireframes`);
       }
 
       return {
@@ -745,105 +677,176 @@ class WireframeService {
       };
     } catch (error) {
       console.error('Error generating wireframes via local API:', error);
-      
-      console.log('🔄 Falling back to template-based wireframe generation');
-      return this.generateWireframesOfflineFallback(projectId);
+      throw error; // RE-THROW instead of falling back
     }
   }
 
-  // Fallback to template generation when API fails
-  private async generateWireframesOfflineFallback(projectId: string): Promise<{
+  // REMOVED: generateWireframesOfflineFallback method
+  // REMOVED: generateWireframesOffline method 
+  // REMOVED: createBasicWireframeHTML, generateCreoleDocumentation, generateSaltUML methods
+
+  async twoWaySyncWireframes(projectId: string, token: string): Promise<{
     success: boolean;
+    syncedCount: number;
     message: string;
-    data?: LocalWireframe[];
-    count?: number;
-    error?: string;
   }> {
     try {
-      const project = localStorageService.getProject(projectId);
-      if (!project) {
-        throw new Error('Project not found in localStorage');
-      }
-
-      const userStories = localStorageService.getUserStoriesByProject(projectId);
-      if (!userStories || userStories.length === 0) {
-        throw new Error('No user stories found for fallback generation');
-      }
-
-      const wireframes = this.generateWireframesOffline(project, userStories);
+      console.log('🔄 Starting two-way wireframe sync...');
       
-      return {
-        success: true,
-        message: `Generated ${wireframes.length} wireframes using templates`,
-        data: wireframes,
-        count: wireframes.length
-      };
+      const result = await this.callWithRateLimit(() => 
+        wireframeAPIService.twoWaySyncWireframes(projectId, token)
+      );
+      
+      if (result.success) {
+        console.log(`✅ Two-way sync completed: ${result.message}`);
+        return {
+          success: true,
+          syncedCount: result.syncedCount,
+          message: result.message
+        };
+      } else {
+        console.warn('⚠️ Two-way sync failed:', result.message);
+        return {
+          success: false,
+          syncedCount: 0,
+          message: result.message
+        };
+      }
     } catch (error) {
-      console.error('Template wireframe generation also failed:', error);
+      console.error('Two-way sync failed:', error);
       return {
         success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        syncedCount: 0,
+        message: `Two-way sync error: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   }
 
-  // Generate wireframes offline (template-based)
-  generateWireframesOffline(project: LocalProject, userStories: LocalUserStory[]): LocalWireframe[] {
-    console.log('Generating wireframes offline for project:', project.title);
+  async getWireframeSyncStatus(projectId: string, token?: string | null): Promise<{
+    success: boolean;
+    sync_status: any;
+    message: string;
+  }> {
+    if (!token) {
+      const localWireframes = localStorageService.getWireframesByProject(projectId);
+      return {
+        success: true,
+        sync_status: {
+          is_synced: true,
+          database: { wireframe_count: 0, last_updated: null },
+          local: { 
+            wireframe_count: localWireframes.length,
+            last_updated: localWireframes.length > 0 
+              ? new Date(Math.max(...localWireframes.map(w => new Date(w.updated_at || w.created_at).getTime()))).toISOString()
+              : null
+          },
+          needs_sync: false,
+          mode: 'offline'
+        },
+        message: 'Offline mode - sync not available'
+      };
+    }
 
-    const storiesByRole: Record<string, LocalUserStory[]> = {};
-    userStories.forEach(story => {
-      if (!storiesByRole[story.role]) {
-        storiesByRole[story.role] = [];
+    try {
+      return await this.callWithRateLimit(() => 
+        wireframeAPIService.getWireframeSyncStatus(projectId, token)
+      );
+    } catch (error) {
+      console.error('Error getting sync status:', error);
+      const localWireframes = localStorageService.getWireframesByProject(projectId);
+      return {
+        success: false,
+        sync_status: {
+          is_synced: false,
+          database: { wireframe_count: 0, last_updated: null },
+          local: { 
+            wireframe_count: localWireframes.length,
+            last_updated: localWireframes.length > 0 
+              ? new Date(Math.max(...localWireframes.map(w => new Date(w.updated_at || w.created_at).getTime()))).toISOString()
+              : null
+          },
+          needs_sync: false,
+          mode: 'error'
+        },
+        message: `Failed to get sync status: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+  
+  async getWireframesForDisplay(projectId: string): Promise<EnhancedWireframe[]> {
+    try {
+      const wireframes = localStorageService.getWireframesByProject(projectId);
+      
+      return wireframes.map(wireframe => this.enhanceWireframeWithDisplayData(wireframe));
+    } catch (error) {
+      console.error('Error getting wireframes for display:', error);
+      return [];
+    }
+  }
+
+  async getWireframeDetails(wireframeId: string): Promise<EnhancedWireframe> {
+    try {
+      const allWireframes = localStorageService.getAllWireframes();
+      const wireframe = allWireframes.find(wf => wf.wireframe_id === wireframeId);
+      
+      if (!wireframe) {
+        throw new Error(`Wireframe with ID ${wireframeId} not found`);
       }
-      storiesByRole[story.role].push(story);
-    });
 
-    const wireframes: LocalWireframe[] = [];
-
-    for (const [role, stories] of Object.entries(storiesByRole)) {
-      const pageName = `${role.toLowerCase().replace(' ', '-')}-page`;
-      const pageType = this.determinePageType(pageName);
-      
-      const htmlContent = this.createBasicWireframeHTML(project, role, stories);
-      
-      const wireframeData: CreateLocalWireframe = {
-        project_id: project.project_id,
-        page_name: pageName,
-        page_type: pageType,
-        description: `${role} interface for ${project.title}`,
-        html_content: htmlContent,
-        creole_content: this.generateCreoleDocumentation(project, role, stories),
-        salt_diagram: this.generateSaltUML(project, role, stories),
-        generated_with_rag: false,
-        wireframe_type: 'desktop',
-        version: 1,
-        preview_url: '',
-        stories_count: stories.length,
-        features_count: new Set(stories.map(s => s.feature)).size,
-        generated_at: new Date().toISOString(),
-        is_local: true
-      };
-
-      // Pass wireframe_id as second parameter
-      const createdWireframe = localStorageService.createWireframe(wireframeData, Date.now().toString());
-      wireframes.push(createdWireframe);
+      return this.enhanceWireframeWithDisplayData(wireframe, true);
+    } catch (error) {
+      console.error('Error getting wireframe details:', error);
+      throw error;
     }
-
-    console.log(`Generated ${wireframes.length} wireframes offline`);
-    return wireframes;
   }
 
-  // Save wireframes to localStorage - FIXED to match LocalWireframe interface
+  private enhanceWireframeWithDisplayData(wireframe: LocalWireframe, includeFullResponse: boolean = false): EnhancedWireframe {
+    const htmlContent = wireframe.html_content || '';
+    const hasValidStructure = this.validateHTMLStructure(htmlContent);
+    
+    const llmResponsePreview = this.extractLLMResponsePreview(wireframe);
+    const usedRag = wireframe.generated_with_rag || false;
+    const usedFallback = !usedRag && (wireframe.is_local || false);
+    
+    const uiPatternsUsed = this.countUIPatterns(htmlContent);
+    const projectPatternsUsed = this.countProjectPatterns(wireframe);
+    
+    const enhancedWireframe: EnhancedWireframe = {
+      ...wireframe,
+      display_data: {
+        page_name: wireframe.page_name,
+        page_type: wireframe.page_type,
+        html_preview: this.generateHTMLPreview(htmlContent),
+        has_valid_structure: hasValidStructure,
+        stories_count: wireframe.stories_count || 0,
+        features_count: wireframe.features_count || 0,
+        generated_at: wireframe.generated_at || wireframe.created_at,
+        debug_status: hasValidStructure ? 'success' : 'invalid_html',
+        llm_response_preview: llmResponsePreview,
+        llm_response_length: llmResponsePreview.length,
+        html_length: htmlContent.length,
+        used_rag: usedRag,
+        used_fallback: usedFallback,
+        generation_error: this.extractGenerationError(wireframe),
+        ui_patterns_used: uiPatternsUsed,
+        project_patterns_used: projectPatternsUsed
+      }
+    };
+    
+    if (includeFullResponse) {
+      enhancedWireframe.full_llm_response = this.extractFullLLMResponse(wireframe);
+    }
+    
+    return enhancedWireframe;
+  }
+
+  // Save wireframes to localStorage - FIXED TO USE ONLY local_wireframes
   private saveWireframesToLocalStorage(apiWireframes: any[], projectId: string): void {
     try {
-      console.log('💾 Saving wireframes to localStorage');
+      console.log('💾 Saving wireframes to local_wireframes only...');
       
-      const existingWireframes = localStorageService.getWireframesByProject(projectId);
-      existingWireframes.forEach(wireframe => {
-        this.deleteWireframeLocal(wireframe.wireframe_id);
-      });
+      // Clear existing wireframes for this project
+      localStorageService.clearProjectWireframes(projectId);
 
       apiWireframes.forEach((apiWireframe: any) => {
         const wireframeData: CreateLocalWireframe = {
@@ -864,27 +867,18 @@ class WireframeService {
           is_local: true
         };
 
-        localStorageService.createWireframe(wireframeData, apiWireframe.wireframe_id || Date.now().toString());
+        const wireframeId = apiWireframe.wireframe_id || `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        localStorageService.createWireframe(wireframeData, wireframeId);
       });
       
-      console.log(`✅ Successfully saved ${apiWireframes.length} wireframes to localStorage`);
+      console.log(`✅ Successfully saved ${apiWireframes.length} wireframes to local_wireframes only`);
+      
+      const savedWireframes = localStorageService.getWireframesByProject(projectId);
+      console.log(`📊 Verified: ${savedWireframes.length} wireframes now in local_wireframes for project ${projectId}`);
+      
     } catch (error) {
       console.error('Failed to save wireframes to localStorage:', error);
-    }
-  }
-
-  // Helper method to delete wireframe locally
-  private deleteWireframeLocal(wireframeId: string): void {
-    try {
-      const wireframesJson = localStorage.getItem('wireframes');
-      if (!wireframesJson) return;
-
-      const wireframes: LocalWireframe[] = JSON.parse(wireframesJson);
-      const filteredWireframes = wireframes.filter(wf => wf.wireframe_id !== wireframeId);
-      
-      localStorage.setItem('wireframes', JSON.stringify(filteredWireframes));
-    } catch (error) {
-      console.error('Error deleting wireframe locally:', error);
     }
   }
 
@@ -1007,106 +1001,6 @@ class WireframeService {
     if (wireframe.salt_diagram && wireframe.salt_diagram.length > 10) count++;
     
     return count;
-  }
-
-  // Helper methods for template generation
-  private createBasicWireframeHTML(project: LocalProject, role: string, stories: LocalUserStory[]): string {
-    const storiesList = stories.map(story => 
-      `<div class="story-item">
-        <h4>${story.story_text}</h4>
-        <p><strong>Feature:</strong> ${story.feature} | <strong>Priority:</strong> ${story.priority}</p>
-      </div>`
-    ).join('');
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${role} Page - ${project.title}</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .header { background: #4699DF; color: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
-        .story-item { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
-        .form-group { margin: 15px 0; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, textarea, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-        .btn { background: #4699DF; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>${role} Dashboard</h1>
-            <p>${project.title} - ${role} Interface</p>
-        </div>
-        
-        <section class="stories-section">
-            <h2>User Stories</h2>
-            ${storiesList}
-        </section>
-        
-        <section class="interaction-section">
-            <h2>Main Interface</h2>
-            <form>
-                <div class="form-group">
-                    <label for="action">Primary Action:</label>
-                    <select id="action">
-                        <option value="">Select an action</option>
-                        ${stories.map(story => `<option value="${story.action}">${story.action}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="data">Data Input:</label>
-                    <textarea id="data" rows="3" placeholder="Enter relevant data..."></textarea>
-                </div>
-                <button type="submit" class="btn">Submit</button>
-            </form>
-        </section>
-    </div>
-</body>
-</html>`;
-  }
-
-  private generateCreoleDocumentation(project: LocalProject, role: string, stories: LocalUserStory[]): string {
-    return `= ${role} Page Documentation
-== Overview
-This page serves the ${role} role in the ${project.title} system.
-
-== User Stories
-${stories.map((story, index) => 
-  `${index + 1}. ${story.story_text}
-   * Feature: ${story.feature}
-   * Priority: ${story.priority}
-   * Points: ${story.story_points}`
-).join('\n\n')}
-
-== Interface Elements
-* Main navigation area
-* User story display section
-* Action form for primary interactions
-* Data input fields
-* Submission controls`;
-  }
-
-  private generateSaltUML(project: LocalProject, role: string, stories: LocalUserStory[]): string {
-    return `@startuml
-actor "${role}" as User
-package "${role} Page" {
-  [Story Display] as Stories
-  [Action Form] as Form
-  [Data Input] as Input
-  [Submit Handler] as Submit
-}
-
-User --> Stories : views stories
-User --> Form : selects action
-User --> Input : enters data
-Input --> Submit : processes
-Submit --> [System] : sends data
-
-@enduml`;
   }
 }
 
