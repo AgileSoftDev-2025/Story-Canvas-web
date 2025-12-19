@@ -16,9 +16,6 @@ const getCurrentTimestamp = (): string => {
   return new Date().toISOString();
 };
 
-// Add this constant at the top
-const USER_STORIES_KEY = 'local_user_stories';
-
 export class LocalStorageService {
   private static instance: LocalStorageService;
   
@@ -26,14 +23,15 @@ export class LocalStorageService {
     CURRENT_USER: 'current_user',
     PROJECTS: 'local_projects',
     USER_STORIES: 'local_user_stories',
-    WIREFRAMES: 'local_wireframes',
+    WIREFRAMES: 'local_wireframes',  // ONLY USE THIS KEY FOR WIREFRAMES
     SCENARIOS: 'local_scenarios',
     SCENARIOS_BY_PROJECT: (projectId: string) => `scenarios_${projectId}`,
     SESSIONS_BY_PROJECT: (projectId: string) => `sessions_${projectId}`,
   };
 
   private constructor() {
-    console.log('🔄 LocalStorageService initialized');
+    console.log('🔄 LocalStorageService initialized (unified wireframe storage)');
+    this.cleanupDuplicateStorage(); // Clean up duplicates on initialization
   }
 
   public static getInstance(): LocalStorageService {
@@ -147,7 +145,6 @@ export class LocalStorageService {
     }
   }
 
-  // FIXED: Method untuk create project dengan ID yang sudah ditentukan
   createProjectWithId(projectData: Omit<LocalProject, 'created_at' | 'updated_at'>): LocalProject {
     try {
       const project: LocalProject = {
@@ -231,9 +228,9 @@ export class LocalStorageService {
       }
       
       // Delete related data
-      this.deleteProjectUserStories(projectId);
-      this.deleteProjectWireframes(projectId);
-      this.deleteProjectScenarios(projectId);
+      this.clearProjectStories(projectId);
+      this.clearProjectWireframes(projectId);
+      this.clearProjectScenarios(projectId);
       
       projects.splice(projectIndex, 1);
       localStorage.setItem(this.KEYS.PROJECTS, JSON.stringify(projects));
@@ -248,7 +245,6 @@ export class LocalStorageService {
 
   // ===== USER STORY METHODS =====
   
-  // FIXED: Method untuk mendapatkan semua stories
   getStories(): LocalUserStory[] {
     try {
       const storiesStr = localStorage.getItem(this.KEYS.USER_STORIES);
@@ -259,7 +255,6 @@ export class LocalStorageService {
     }
   }
 
-  // FIXED: Method untuk create user story dengan custom ID
   createUserStory(storyData: Omit<LocalUserStory, 'story_id' | 'created_at' | 'updated_at'>, customId?: string): LocalUserStory {
     try {
       const storyId = customId || this.generateStoryId();
@@ -283,7 +278,6 @@ export class LocalStorageService {
     }
   }
 
-  // Helper untuk generate story ID
   private generateStoryId(): string {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1000);
@@ -357,7 +351,6 @@ export class LocalStorageService {
     }
   }
 
-  // FIXED: Method untuk clear semua stories dari project
   clearProjectStories(projectId: string): void {
     try {
       const stories = this.getAllUserStories();
@@ -369,24 +362,24 @@ export class LocalStorageService {
     }
   }
 
-  private deleteProjectUserStories(projectId: string): void {
-    this.clearProjectStories(projectId);
-  }
-
-  // ===== WIREFRAME METHODS =====
-  createWireframe(wireframeData: Omit<LocalWireframe, 'wireframe_id' | 'created_at' | 'updated_at'>, wireframe_id: any): LocalWireframe {
+  // ===== WIREFRAME METHODS - UNIFIED STORAGE =====
+  
+  createWireframe(wireframeData: Omit<LocalWireframe, 'wireframe_id' | 'created_at' | 'updated_at'>, customId?: string): LocalWireframe {
     try {
       const wireframes = this.getAllWireframes();
+      const wireframeId = customId || generateShortUUID();
+      
       const wireframe: LocalWireframe = {
         ...wireframeData,
-        wireframe_id: generateShortUUID(),
+        wireframe_id: wireframeId,
         created_at: getCurrentTimestamp(),
         updated_at: getCurrentTimestamp(),
       };
       
       wireframes.push(wireframe);
       localStorage.setItem(this.KEYS.WIREFRAMES, JSON.stringify(wireframes));
-      console.log('✅ Wireframe created:', wireframe.wireframe_id);
+      
+      console.log('✅ Wireframe created in local_wireframes:', wireframeId);
       return wireframe;
     } catch (error) {
       console.error('❌ Error creating wireframe:', error);
@@ -396,23 +389,80 @@ export class LocalStorageService {
 
   getWireframesByProject(projectId: string): LocalWireframe[] {
     const wireframes = this.getAllWireframes();
-    return wireframes.filter(w => w.project_id === projectId);
+    const filtered = wireframes.filter(w => w.project_id === projectId);
+    console.log(`🔍 Found ${filtered.length} wireframes for project ${projectId} in local_wireframes`);
+    return filtered;
   }
 
   getAllWireframes(): LocalWireframe[] {
     try {
       const wireframesStr = localStorage.getItem(this.KEYS.WIREFRAMES);
-      return wireframesStr ? JSON.parse(wireframesStr) : [];
+      const wireframes = wireframesStr ? JSON.parse(wireframesStr) : [];
+      console.log(`📋 Total wireframes in local_wireframes: ${wireframes.length}`);
+      return wireframes;
     } catch (error) {
       console.error('❌ Error getting wireframes:', error);
       return [];
     }
   }
 
-  private deleteProjectWireframes(projectId: string): void {
-    const wireframes = this.getAllWireframes();
-    const filteredWireframes = wireframes.filter(w => w.project_id !== projectId);
-    localStorage.setItem(this.KEYS.WIREFRAMES, JSON.stringify(filteredWireframes));
+  updateWireframe(wireframeId: string, updates: Partial<LocalWireframe>): LocalWireframe | null {
+    try {
+      const wireframes = this.getAllWireframes();
+      const wireframeIndex = wireframes.findIndex(w => w.wireframe_id === wireframeId);
+      
+      if (wireframeIndex === -1) {
+        console.log('❌ Wireframe not found for update:', wireframeId);
+        return null;
+      }
+      
+      const updatedWireframe: LocalWireframe = {
+        ...wireframes[wireframeIndex],
+        ...updates,
+        updated_at: getCurrentTimestamp(),
+      };
+      
+      wireframes[wireframeIndex] = updatedWireframe;
+      localStorage.setItem(this.KEYS.WIREFRAMES, JSON.stringify(wireframes));
+      
+      console.log('✅ Wireframe updated in local_wireframes:', wireframeId);
+      return updatedWireframe;
+    } catch (error) {
+      console.error('❌ Error updating wireframe:', error);
+      return null;
+    }
+  }
+
+  deleteWireframe(wireframeId: string): boolean {
+    try {
+      const wireframes = this.getAllWireframes();
+      const wireframeIndex = wireframes.findIndex(w => w.wireframe_id === wireframeId);
+      
+      if (wireframeIndex === -1) {
+        console.log('❌ Wireframe not found for deletion:', wireframeId);
+        return false;
+      }
+      
+      wireframes.splice(wireframeIndex, 1);
+      localStorage.setItem(this.KEYS.WIREFRAMES, JSON.stringify(wireframes));
+      
+      console.log('✅ Wireframe deleted from local_wireframes:', wireframeId);
+      return true;
+    } catch (error) {
+      console.error('❌ Error deleting wireframe:', error);
+      return false;
+    }
+  }
+
+  clearProjectWireframes(projectId: string): void {
+    try {
+      const wireframes = this.getAllWireframes();
+      const filteredWireframes = wireframes.filter(w => w.project_id !== projectId);
+      localStorage.setItem(this.KEYS.WIREFRAMES, JSON.stringify(filteredWireframes));
+      console.log(`🧹 Cleared wireframes for project ${projectId} from local_wireframes`);
+    } catch (error) {
+      console.error('Error clearing project wireframes:', error);
+    }
   }
 
   // ===== SCENARIO METHODS =====
@@ -438,7 +488,6 @@ export class LocalStorageService {
 
   updateScenario(scenarioId: string, updates: Partial<LocalScenario>): boolean {
     try {
-      // Update in main storage
       const allScenarios = this.getAllScenarios();
       const scenarioIndex = allScenarios.findIndex(s => s.scenario_id === scenarioId);
       
@@ -456,7 +505,6 @@ export class LocalStorageService {
       localStorage.setItem(this.KEYS.SCENARIOS, JSON.stringify(allScenarios));
       console.log(`✅ Updated scenario ${scenarioId} in main storage`);
       
-      // Also update in project-specific storage
       const projectId = allScenarios[scenarioIndex].project_id;
       const projectScenarios = this.getScenariosByProject(projectId);
       const projectIndex = projectScenarios.findIndex(s => s.scenario_id === scenarioId);
@@ -481,7 +529,6 @@ export class LocalStorageService {
 
   getScenariosByProject(projectId: string): LocalScenario[] {
     try {
-      // First try project-specific storage
       const projectKey = this.KEYS.SCENARIOS_BY_PROJECT(projectId);
       const scenariosStr = localStorage.getItem(projectKey);
       
@@ -491,7 +538,6 @@ export class LocalStorageService {
         return scenarios;
       }
       
-      // Fallback: filter from main storage
       const allScenarios = this.getAllScenarios();
       const filtered = allScenarios.filter(s => s.project_id === projectId);
       console.log(`📋 Found ${filtered.length} scenarios for project ${projectId} (from main storage)`);
@@ -512,14 +558,12 @@ export class LocalStorageService {
     }
   }
 
-  // Method to save scenarios directly to project storage
   saveScenariosToProject(projectId: string, scenarios: LocalScenario[]): void {
     try {
       const projectKey = this.KEYS.SCENARIOS_BY_PROJECT(projectId);
       localStorage.setItem(projectKey, JSON.stringify(scenarios));
       console.log(`✅ Saved ${scenarios.length} scenarios to project storage: ${projectKey}`);
       
-      // Also update main storage
       const allScenarios = this.getAllScenarios();
       const newScenarios = scenarios.filter(scenario => 
         !allScenarios.some(s => s.scenario_id === scenario.scenario_id)
@@ -535,7 +579,6 @@ export class LocalStorageService {
     }
   }
 
-  // Method to save session data for a project
   saveSessionData(projectId: string, sessionData: any): void {
     try {
       const projectKey = this.KEYS.SESSIONS_BY_PROJECT(projectId);
@@ -548,7 +591,6 @@ export class LocalStorageService {
     }
   }
 
-  // Method to get session data for a project
   getSessionData(projectId: string): any[] {
     try {
       const projectKey = this.KEYS.SESSIONS_BY_PROJECT(projectId);
@@ -559,18 +601,15 @@ export class LocalStorageService {
     }
   }
 
-  private deleteProjectScenarios(projectId: string): void {
+  clearProjectScenarios(projectId: string): void {
     try {
-      // Delete from main storage
       const allScenarios = this.getAllScenarios();
       const filtered = allScenarios.filter(s => s.project_id !== projectId);
       localStorage.setItem(this.KEYS.SCENARIOS, JSON.stringify(filtered));
       
-      // Delete project-specific storage
       const projectKey = this.KEYS.SCENARIOS_BY_PROJECT(projectId);
       localStorage.removeItem(projectKey);
       
-      // Delete session data
       const sessionKey = this.KEYS.SESSIONS_BY_PROJECT(projectId);
       localStorage.removeItem(sessionKey);
       
@@ -591,11 +630,62 @@ export class LocalStorageService {
     return stats;
   }
 
-  // ===== DEBUG METHODS =====
+  // ===== CLEANUP & DEBUG METHODS =====
+  
+  private cleanupDuplicateStorage(): void {
+    try {
+      console.log('🔧 Checking for duplicate wireframe storage...');
+      
+      const allKeys = Object.keys(localStorage);
+      const wireframeKeys = allKeys.filter(key => 
+        key.toLowerCase().includes('wireframe') && 
+        key !== this.KEYS.WIREFRAMES
+      );
+      
+      if (wireframeKeys.length > 0) {
+        console.log(`⚠️ Found ${wireframeKeys.length} duplicate wireframe keys:`, wireframeKeys);
+        
+        // Collect all wireframes from duplicates
+        const allWireframes = this.getAllWireframes(); // Start with current wireframes
+        
+        wireframeKeys.forEach(key => {
+          try {
+            const data = localStorage.getItem(key);
+            if (data) {
+              const wireframes = JSON.parse(data);
+              if (Array.isArray(wireframes)) {
+                console.log(`📦 Found ${wireframes.length} wireframes in duplicate key: ${key}`);
+                allWireframes.push(...wireframes);
+              }
+            }
+          } catch (e) {
+            console.log(`⚠️ Could not parse ${key}:`, e);
+          }
+          
+          // Remove the duplicate key
+          localStorage.removeItem(key);
+          console.log(`🗑️ Removed duplicate key: ${key}`);
+        });
+        
+        // Remove duplicates by wireframe_id
+        const uniqueWireframes = Array.from(
+          new Map(allWireframes.map(wf => [wf.wireframe_id, wf])).values()
+        );
+        
+        // Save all unique wireframes
+        localStorage.setItem(this.KEYS.WIREFRAMES, JSON.stringify(uniqueWireframes));
+        console.log(`✅ Consolidated ${uniqueWireframes.length} wireframes to local_wireframes`);
+      } else {
+        console.log('✅ No duplicate wireframe storage found');
+      }
+    } catch (error) {
+      console.error('Error cleaning up duplicate storage:', error);
+    }
+  }
+
   debugStorage(): void {
     console.log('=== 🐛 LOCALSTORAGE DEBUG ===');
     
-    // Show all defined keys
     console.log('Defined storage keys:');
     console.log('- Current User:', localStorage.getItem(this.KEYS.CURRENT_USER) ? '✅' : '❌');
     console.log('- Projects:', localStorage.getItem(this.KEYS.PROJECTS) ? `${JSON.parse(localStorage.getItem(this.KEYS.PROJECTS) || '[]').length} items` : '❌');
@@ -603,11 +693,10 @@ export class LocalStorageService {
     console.log('- Wireframes:', localStorage.getItem(this.KEYS.WIREFRAMES) ? `${JSON.parse(localStorage.getItem(this.KEYS.WIREFRAMES) || '[]').length} items` : '❌');
     console.log('- Scenarios:', localStorage.getItem(this.KEYS.SCENARIOS) ? `${JSON.parse(localStorage.getItem(this.KEYS.SCENARIOS) || '[]').length} items` : '❌');
     
-    // Show all scenario-related keys
-    console.log('\nAll scenario-related keys in localStorage:');
+    console.log('\nAll wireframe-related keys in localStorage:');
     const allKeys = Object.keys(localStorage);
-    const scenarioKeys = allKeys.filter(key => key.includes('scenario') || key.includes('Scenario'));
-    scenarioKeys.forEach(key => {
+    const wireframeKeys = allKeys.filter(key => key.toLowerCase().includes('wireframe'));
+    wireframeKeys.forEach(key => {
       try {
         const data = JSON.parse(localStorage.getItem(key) || '[]');
         console.log(`- ${key}: ${Array.isArray(data) ? data.length : 1} items`);
@@ -616,27 +705,29 @@ export class LocalStorageService {
       }
     });
     
+    if (wireframeKeys.length > 1) {
+      console.log('⚠️ WARNING: Multiple wireframe keys found! Run cleanupDuplicateStorage()');
+    }
+    
     console.log('=== DEBUG END ===');
   }
 
   clearAllData(): void {
     try {
-      // Clear all keys
       localStorage.removeItem(this.KEYS.CURRENT_USER);
       localStorage.removeItem(this.KEYS.PROJECTS);
       localStorage.removeItem(this.KEYS.USER_STORIES);
       localStorage.removeItem(this.KEYS.WIREFRAMES);
       localStorage.removeItem(this.KEYS.SCENARIOS);
       
-      // Clear all dynamic keys
       const allKeys = Object.keys(localStorage);
       allKeys.forEach(key => {
-        if (key.startsWith('scenarios_') || key.startsWith('sessions_')) {
+        if (key.startsWith('scenarios_') || key.startsWith('sessions_') || key.startsWith('wireframes_')) {
           localStorage.removeItem(key);
         }
       });
       
-      console.log('🧹 All localStorage data cleared');
+      console.log('🧹 All localStorage data cleared (unified storage)');
     } catch (error) {
       console.error('Error clearing all data:', error);
     }

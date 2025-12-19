@@ -99,160 +99,152 @@ export default function ExportPage() {
     return !!(accessToken && refreshToken && currentUser);
   };
 
-  // ✅ ADDED: Function to clear all localStorage EXCEPT auth data
-  const clearAllLocalStorageExceptAuth = () => {
-    try {
-      console.log("🧹 Clearing localStorage except auth data...");
-      
-      // Save auth data temporarily
-      const accessToken = localStorage.getItem('access_token');
-      const refreshToken = localStorage.getItem('refresh_token');
-      const currentUser = localStorage.getItem('current_user');
-      
-      // Clear everything
-      localStorage.clear();
-      
-      // Restore auth data if user is logged in
-      if (accessToken && refreshToken && currentUser) {
-        localStorage.setItem('access_token', accessToken);
-        localStorage.setItem('refresh_token', refreshToken);
-        localStorage.setItem('current_user', currentUser);
-        console.log("✅ Auth data preserved");
-      } else {
-        console.log("ℹ️ No auth data to preserve");
-      }
-      
-      return true;
-    } catch (error) {
-      console.error("❌ Error clearing localStorage:", error);
-      return false;
-    }
-  };
-
   // ✅ ADDED: Function to clear all localStorage when NOT logged in
-  const clearAllLocalStorageWhenLoggedOut = () => {
-    if (!isLoggedIn()) {
-      console.log("🚪 User not logged in, clearing all localStorage...");
-      localStorage.clear();
-      return true;
-    }
-    return false;
-  };
 
-  // ✅ UPDATED: Function to delete project data with auth check
   const deleteProjectData = () => {
-    if (!projectId) return false;
+  if (!projectId) return false;
+  
+  try {
+    console.log(`🗑️ Deleting project data for project ID: ${projectId}`);
     
-    try {
-      console.log(`🗑️ Deleting project data for project ID: ${projectId}`);
+    const loggedIn = isLoggedIn();
+    
+    if (loggedIn) {
+      // If logged in: Delete only project-specific data
+      console.log("🔐 User is logged in, deleting only project data...");
       
-      // 1. Delete the project itself
-      const success = localStorageService.deleteProject(projectId);
+      // Get all localStorage keys
+      const allKeys = Object.keys(localStorage);
       
-      if (success) {
-        console.log("✅ Project deleted from localStorage");
+      // List of keys that might contain project data
+      const keysToRemove = allKeys.filter(key => {
+        // Remove project-specific keys
+        if (key.includes(projectId)) return true;
         
-        // 2. If user is NOT logged in, clear everything
-        if (!isLoggedIn()) {
-          console.log("🚪 User not logged in, clearing all localStorage...");
-          localStorage.clear();
-        } else {
-          // 3. If logged in, only clear project-related data
-          const allKeys = Object.keys(localStorage);
-          const projectKeys = allKeys.filter(key => 
-            key.includes(projectId) || 
-            key.includes(`scenarios_${projectId}`) ||
-            key.includes(`sessions_${projectId}`) ||
-            key === 'local_projects' ||
-            key === 'local_user_stories' ||
-            key === 'local_wireframes' ||
-            key === 'local_scenarios'
-          );
-          
-          projectKeys.forEach(key => {
-            localStorage.removeItem(key);
-            console.log(`🗑️ Removed project-related key: ${key}`);
-          });
+        // Remove specific project collections
+        if (key === 'local_projects' || 
+            key === 'local_user_stories' || 
+            key === 'local_wireframes' || 
+            key === 'local_scenarios') {
+          return true;
         }
         
-        return true;
-      }
+        return false;
+      });
       
-      return false;
-    } catch (error) {
-      console.error("❌ Error deleting project data:", error);
-      return false;
+      // Remove the keys
+      keysToRemove.forEach(key => {
+        try {
+          const value = localStorage.getItem(key);
+          if (value) {
+            // For collection keys, filter out this project's data instead of removing entire collection
+            if (key === 'local_projects') {
+              const projects = JSON.parse(value);
+              const filteredProjects = projects.filter((p: LocalProject) => p.project_id !== projectId);
+              localStorage.setItem(key, JSON.stringify(filteredProjects));
+            } else if (key === 'local_user_stories') {
+              const stories = JSON.parse(value);
+              const filteredStories = stories.filter((s: LocalUserStory) => s.project_id !== projectId);
+              localStorage.setItem(key, JSON.stringify(filteredStories));
+            } else if (key === 'local_wireframes') {
+              const wireframes = JSON.parse(value);
+              const filteredWireframes = wireframes.filter((w: LocalWireframe) => w.project_id !== projectId);
+              localStorage.setItem(key, JSON.stringify(filteredWireframes));
+            } else if (key === 'local_scenarios') {
+              const scenarios = JSON.parse(value);
+              const filteredScenarios = scenarios.filter((s: LocalScenario) => s.project_id !== projectId);
+              localStorage.setItem(key, JSON.stringify(filteredScenarios));
+            } else {
+              // For other keys, remove completely
+              localStorage.removeItem(key);
+            }
+          }
+        } catch (err) {
+          console.error(`Error processing key ${key}:`, err);
+        }
+      });
+      
+      console.log(`✅ Removed ${keysToRemove.length} project-related keys (logged in mode)`);
+      
+    } else {
+      // If NOT logged in: Clear ALL localStorage
+      console.log("🚪 User is NOT logged in, clearing ALL localStorage...");
+      localStorage.clear();
     }
-  };
+    
+    return true;
+    
+  } catch (error) {
+    console.error("❌ Error deleting project data:", error);
+    return false;
+  }
+};
 
   // ✅ UPDATED: Load project data with auth check
   useEffect(() => {
-    // Clear all data if user is not logged in
-    clearAllLocalStorageWhenLoggedOut();
-    
-    if (!projectId) {
-      setError("No project ID provided");
-      setLoading(false);
-      return;
-    }
+  if (!projectId) {
+    setError("No project ID provided");
+    setLoading(false);
+    return;
+  }
 
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        
-        // Check if user is logged in
-        const loggedIn = isLoggedIn();
-        console.log(`🔐 User logged in: ${loggedIn}`);
-        
-        // Get project data
-        const project = localStorageService.getProject(projectId);
-        if (!project) {
-          setError("Project not found in local storage");
-          setLoading(false);
-          return;
-        }
-        
-        setProjectData(project);
-        
-        // Get user stories
-        const stories = localStorageService.getUserStoriesByProject(projectId);
-        setUserStories(stories);
-        
-        // Get wireframes
-        const wireframesData = localStorageService.getWireframesByProject(projectId);
-        setWireframes(wireframesData);
-        
-        // Get scenarios from localStorage
-        const allScenariosRaw = localStorage.getItem('local_scenarios');
-        if (allScenariosRaw) {
-          const allScenarios = JSON.parse(allScenariosRaw);
-          const projectScenarios = allScenarios.filter((s: LocalScenario) => s.project_id === projectId);
-          setScenarios(projectScenarios);
-        }
-        
-        // Generate PNG images for wireframes with salt diagrams
-        const imagePromises = wireframesData.map(async (wireframe) => {
-          if (wireframe.salt_diagram && wireframe.salt_diagram.trim().length > 0) {
-            await generatePNGFromSalt(wireframe.salt_diagram, wireframe.wireframe_id);
-          }
-        });
-        
-        await Promise.all(imagePromises);
-        
-        // Build file structure
-        updateFileStructure(project, stories, wireframesData, scenarios);
-        
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      
+      // Check if user is logged in (but DON'T clear localStorage)
+      const loggedIn = isLoggedIn();
+      console.log(`🔐 User logged in: ${loggedIn}`);
+      
+      // Get project data
+      const project = localStorageService.getProject(projectId);
+      if (!project) {
+        setError("Project not found in local storage");
         setLoading(false);
-        
-      } catch (err) {
-        console.error("Error loading project data:", err);
-        setError("Failed to load project data");
-        setLoading(false);
+        return;
       }
-    };
+      
+      setProjectData(project);
+      
+      // Get user stories
+      const stories = localStorageService.getUserStoriesByProject(projectId);
+      setUserStories(stories);
+      
+      // Get wireframes
+      const wireframesData = localStorageService.getWireframesByProject(projectId);
+      setWireframes(wireframesData);
+      
+      // Get scenarios from localStorage
+      const allScenariosRaw = localStorage.getItem('local_scenarios');
+      if (allScenariosRaw) {
+        const allScenarios = JSON.parse(allScenariosRaw);
+        const projectScenarios = allScenarios.filter((s: LocalScenario) => s.project_id === projectId);
+        setScenarios(projectScenarios);
+      }
+      
+      // Generate PNG images for wireframes with salt diagrams
+      const imagePromises = wireframesData.map(async (wireframe) => {
+        if (wireframe.salt_diagram && wireframe.salt_diagram.trim().length > 0) {
+          await generatePNGFromSalt(wireframe.salt_diagram, wireframe.wireframe_id);
+        }
+      });
+      
+      await Promise.all(imagePromises);
+      
+      // Build file structure
+      updateFileStructure(project, stories, wireframesData, scenarios);
+      
+      setLoading(false);
+      
+    } catch (err) {
+      console.error("Error loading project data:", err);
+      setError("Failed to load project data");
+      setLoading(false);
+    }
+  };
 
-    loadData();
-  }, [projectId]);
+  loadData();
+}, [projectId]);
 
   // Function to generate PNG from Salt UML
   const generatePNGFromSalt = async (saltCode: string, wireframeId: string): Promise<{ success: boolean; png_url?: string; error?: string }> => {
@@ -683,58 +675,57 @@ IS LOCAL: ${wireframe.is_local ? "Yes" : "No"}
     setShowConfirmDialog(true);
   };
 
-  // ✅ UPDATED: Export as ZIP and delete localStorage based on auth status
   const exportAndDeleteProject = async () => {
-    const selectedSections = sections.filter(section => section.selected);
+  const selectedSections = sections.filter(section => section.selected);
+  
+  if (selectedSections.length === 0) {
+    alert("Pilih minimal satu bagian untuk diexport!");
+    return;
+  }
+
+  if (!projectData) {
+    alert("Project data not loaded!");
+    return;
+  }
+
+  try {
+    setExporting(true);
     
-    if (selectedSections.length === 0) {
-      alert("Pilih minimal satu bagian untuk diexport!");
-      return;
-    }
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const projectName = projectData.title.replace(/\s+/g, '_');
+    const zipFiles = [];
+    const now = new Date();
 
-    if (!projectData) {
-      alert("Project data not loaded!");
-      return;
-    }
-
-    try {
-      setExporting(true);
-      
-      const timestamp = new Date().toISOString().slice(0, 10);
-      const projectName = projectData.title.replace(/\s+/g, '_');
-      const zipFiles = [];
-      const now = new Date();
-
-      // Add all selected files
-      for (const section of selectedSections) {
-        for (const file of section.files) {
-          if (file.selected) {
-            if (file.type === 'text' && file.content) {
+    // Add all selected files
+    for (const section of selectedSections) {
+      for (const file of section.files) {
+        if (file.selected) {
+          if (file.type === 'text' && file.content) {
+            zipFiles.push({
+              name: `${section.id}/${file.name}`,
+              lastModified: now,
+              input: file.content
+            });
+          } else if (file.type === 'image' && file.imageUrl) {
+            try {
+              const blob = await fetchImageAsBlob(file.imageUrl);
+              const arrayBuffer = await blob.arrayBuffer();
               zipFiles.push({
                 name: `${section.id}/${file.name}`,
                 lastModified: now,
-                input: file.content
+                input: arrayBuffer
               });
-            } else if (file.type === 'image' && file.imageUrl) {
-              try {
-                const blob = await fetchImageAsBlob(file.imageUrl);
-                const arrayBuffer = await blob.arrayBuffer();
-                zipFiles.push({
-                  name: `${section.id}/${file.name}`,
-                  lastModified: now,
-                  input: arrayBuffer
-                });
-              } catch (error) {
-                console.error(`Failed to fetch image ${file.name}:`, error);
-              }
+            } catch (error) {
+              console.error(`Failed to fetch image ${file.name}:`, error);
             }
           }
         }
       }
+    }
 
-      // Add README file
-      const loggedIn = isLoggedIn();
-      const readmeContent = `Project Export: ${projectData.title}
+    // Add README file
+    const loggedIn = isLoggedIn();
+    const readmeContent = `Project Export: ${projectData.title}
 Generated: ${new Date().toLocaleString()}
 Project ID: ${projectId}
 User Status: ${loggedIn ? 'Logged In' : 'Not Logged In'}
@@ -747,55 +738,55 @@ Total files: ${zipFiles.length}
 ${loggedIn 
   ? 'Note: After export, only project data was deleted. Your account remains active.'
   : 'Warning: You are not logged in. All data has been cleared from this browser.'}`;
-      
-      zipFiles.unshift({
-        name: "README.txt",
-        lastModified: now,
-        input: readmeContent
-      });
+    
+    zipFiles.unshift({
+      name: "README.txt",
+      lastModified: now,
+      input: readmeContent
+    });
 
-      // Generate and download ZIP using client-zip
-      const blob = await downloadZip(zipFiles).blob();
-      const zipFilename = `${projectName}_export_${timestamp}.zip`;
+    // Generate and download ZIP using client-zip
+    const blob = await downloadZip(zipFiles).blob();
+    const zipFilename = `${projectName}_export_${timestamp}.zip`;
+    
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = zipFilename;
+    link.click();
+    
+    // Clean up
+    URL.revokeObjectURL(link.href);
+    
+    console.log("✅ ZIP export completed");
+    
+    // ✅ NOW DELETE THE PROJECT DATA (only after successful export!)
+    console.log("🗑️ Deleting project data from localStorage...");
+    const deleteSuccess = deleteProjectData();
+    
+    if (deleteSuccess) {
+      const message = loggedIn 
+        ? `✅ Export successful! Project "${projectData.title}" has been exported. Your account data is preserved.`
+        : `✅ Export successful! Project "${projectData.title}" has been exported. All data has been cleared from this browser.`;
       
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = zipFilename;
-      link.click();
+      console.log(message);
       
-      // Clean up
-      URL.revokeObjectURL(link.href);
-      
-      console.log("✅ ZIP export completed");
-      
-      // ✅ NOW DELETE THE PROJECT DATA FROM localStorage based on auth status
-      const deleteSuccess = deleteProjectData();
-      
-      if (deleteSuccess) {
-        console.log("✅ Project data deleted from localStorage");
-        
-        // Show success message and redirect
-        setTimeout(() => {
-          const message = loggedIn 
-            ? `✅ Export successful! Project "${projectData.title}" has been exported. Your account data is preserved.`
-            : `✅ Export successful! Project "${projectData.title}" has been exported. All data has been cleared from this browser.`;
-          
-          alert(message);
-          navigate("/"); // Redirect to projects page
-        }, 500);
-      } else {
-        alert("⚠️ Export completed, but there was an issue removing the project from storage.");
-        navigate("/");
-      }
-      
-      setExporting(false);
-      
-    } catch (error) {
-      console.error("Error exporting as ZIP:", error);
-      alert("❌ Error exporting as ZIP. Please try again.");
-      setExporting(false);
+      setTimeout(() => {
+        alert(message);
+        navigate("/"); // Redirect to projects page
+      }, 500);
+    } else {
+      alert("⚠️ Export completed, but there was an issue removing the project from storage.");
+      navigate("/");
     }
-  };
+    
+    setExporting(false);
+    
+  } catch (error) {
+    console.error("Error exporting as ZIP:", error);
+    alert("❌ Error exporting as ZIP. Please try again.");
+    setExporting(false);
+  }
+};
 
   // ✅ UPDATED: Handle Export as ZIP with confirmation based on auth status
   const handleExportAsZip = () => {

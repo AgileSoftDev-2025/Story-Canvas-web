@@ -1,4 +1,4 @@
-// app/pages/HasilGenerate.tsx - UPDATED WITH AUTO-SYNC LOGIC
+// app/pages/HasilGenerate.tsx - FIXED WITH LOCAL API
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Header } from "../../components/header";
 import { Footer } from "../../components/footer";
@@ -14,10 +14,9 @@ import { useAuth } from "../../context/AuthContext";
 import { scenarioSyncService } from "../../services/ScenarioSyncService";
 
 // Import the ScenarioService from the correct path
-// We need to create this file or fix the import
 import { ScenarioService } from "../../services/scenarioServices";
 
-// Constants
+// Constants - USING LOCAL API
 const API_URL = "http://127.0.0.1:5173/api/local-projects/generate-scenarios/";
 
 // Define all possible scenario types including boundary_path
@@ -107,7 +106,7 @@ export default function HasilGenerate() {
     });
   };
 
-  // Main function to load project with auto-sync
+  // Main function to load project with auto-sync - FIXED TO USE LOCAL API
   const loadProjectAndGenerateScenariosWithSync = async (): Promise<void> => {
     try {
       setLoading(true);
@@ -206,45 +205,25 @@ export default function HasilGenerate() {
         });
 
         if (scenariosData.length === 0) {
-          console.log("🚀 No scenarios found, generating automatically...");
-          // Use the unified service method for generation with auto-sync
-          const generationResult = await scenarioService.generateScenariosWithSync(
-            projectId, 
-            authToken, 
-            projectData, // This is LocalProject, not null
-            stories,
-            wireframesData
-          );
-
-          if (generationResult.success && generationResult.data && generationResult.data.length > 0) {
-            scenariosData = generationResult.data;
-            setHasGenerated(true);
-            setSuccess(generationResult.message);
-            
-            // Auto-sync is already handled inside generateScenariosWithSync
-            if (generationResult.autoSynced) {
-              console.log('✅ Scenarios were auto-synced during generation');
-            }
-          } else {
-            throw new Error(generationResult.error || 'Failed to generate scenarios');
-          }
+          console.log("🚀 No scenarios found, generating via local API...");
+          // Use local API for scenario generation instead of auto-generation
+          await generateScenariosViaLocalAPI(projectId, projectData, stories, wireframesData);
         } else {
           console.log("✅ Using existing scenarios from localStorage:", scenariosData.length);
+          setScenarios(scenariosData);
           setHasGenerated(true);
         }
 
-        setScenarios(scenariosData);
-        
       } catch (generationError) {
         console.error("❌ Error in scenario generation/loading:", generationError);
         
-        // Try fallback generation
+        // Try fallback generation via local API
         if (generationError instanceof Error && 
             (generationError.message.includes('No user stories') || 
              generationError.message.includes('No wireframes'))) {
           setError(generationError.message);
         } else {
-          await generateFallbackScenarios(stories);
+          await generateFallbackScenariosViaAPI(stories);
         }
       }
 
@@ -257,6 +236,275 @@ export default function HasilGenerate() {
       setError(errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // NEW: Generate scenarios via local API - FIXED: Don't clear existing scenarios
+  const generateScenariosViaLocalAPI = async (
+    projectId: string, 
+    projectData: LocalProject,
+    stories: LocalUserStory[],
+    wireframesData: LocalWireframe[]
+  ): Promise<void> => {
+    try {
+      setGenerating(true);
+      setError(null);
+      setSuccess(null);
+      
+      console.log('🚀 Generating scenarios via local API...');
+      setSyncStatus('Generating scenarios via local API...');
+
+      // Prepare data for API call
+      const apiProjectData = {
+        title: projectData.title,
+        objective: projectData.objective || '',
+        users: Array.isArray(projectData.users_data) ? projectData.users_data : [],
+        features: Array.isArray(projectData.features_data) ? projectData.features_data : [],
+        scope: projectData.scope || '',
+        flow: projectData.flow || '',
+        additional_info: projectData.additional_info || '',
+        domain: projectData.domain || 'general'
+      };
+
+      const apiUserStories = stories.slice(0, 3).map(story => ({
+        story_id: story.story_id,
+        story_text: story.story_text,
+        role: story.role,
+        action: story.action,
+        benefit: story.benefit,
+        feature: story.feature,
+        acceptance_criteria: story.acceptance_criteria,
+        priority: story.priority,
+        story_points: story.story_points,
+        status: story.status
+      }));
+
+      const apiWireframes = wireframesData.slice(0, 2).map(wf => ({
+        wireframe_id: wf.wireframe_id,
+        page_name: wf.page_name,
+        html_content: wf.html_content || '',
+        page_type: wf.page_type || 'general'
+      }));
+
+      console.log('📤 Sending request to local API:', {
+        url: API_URL,
+        project_id: projectId,
+        user_stories_count: apiUserStories.length,
+        wireframes_count: apiWireframes.length
+      });
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          project_id: projectId,
+          project_data: apiProjectData,
+          user_stories: apiUserStories,
+          wireframes: apiWireframes
+        })
+      });
+
+      console.log('📥 Local API Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Local API Error:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Local API Response data:', data);
+
+      if (!data.success) {
+        throw new Error(data.error || data.message || 'Scenario generation failed on server');
+      }
+
+      // Save scenarios to localStorage WITHOUT clearing existing ones
+      if (data.scenarios && Array.isArray(data.scenarios)) {
+        const savedScenarios: LocalScenario[] = [];
+        
+        // Get existing scenarios to check for duplicates
+        const existingScenarios = localStorageService.getScenariosByProject(projectId);
+        const existingIds = new Set(existingScenarios.map(s => s.scenario_id));
+        
+        console.log(`📊 Existing scenarios: ${existingScenarios.length}, New scenarios from API: ${data.scenarios.length}`);
+
+        // Save new scenarios (skip if already exists)
+        data.scenarios.forEach((apiScenario: any) => {
+          try {
+            // Check if scenario already exists
+            if (existingIds.has(apiScenario.scenario_id)) {
+              console.log(`ℹ️ Scenario ${apiScenario.scenario_id} already exists, skipping...`);
+              return;
+            }
+            
+            const scenarioInput: Omit<LocalScenario, 'scenario_id' | 'created_at' | 'updated_at'> = {
+              project_id: projectId,
+              user_story_id: apiScenario.user_story_id || null,
+              scenario_text: apiScenario.scenario_text || '',
+              scenario_type: apiScenario.scenario_type || 'happy_path',
+              title: apiScenario.title || 'Scenario',
+              detected_domain: apiScenario.detected_domain || 'general',
+              has_proper_structure: apiScenario.has_proper_structure || true,
+              gherkin_steps: apiScenario.gherkin_steps || [],
+              enhanced_with_llm: apiScenario.enhanced_with_llm || false,
+              status: apiScenario.status || 'draft',
+            };
+
+            const savedScenario = localStorageService.createScenario(scenarioInput, apiScenario.scenario_id);
+            savedScenarios.push(savedScenario);
+          } catch (err) {
+            console.error('Error saving scenario:', err);
+          }
+        });
+
+        // Combine existing and new scenarios
+        const allScenariosForProject = [...existingScenarios, ...savedScenarios];
+        
+        setScenarios(allScenariosForProject);
+        setHasGenerated(true);
+        setSuccess(`Generated ${savedScenarios.length} new scenarios via local API (Total: ${allScenariosForProject.length})`);
+        setSyncStatus('✅ Scenarios generated successfully');
+        
+        console.log(`✅ Saved ${savedScenarios.length} new scenarios to localStorage (Total: ${allScenariosForProject.length})`);
+      } else {
+        throw new Error('No scenarios returned from API');
+      }
+
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate scenarios via local API';
+      console.error("❌ Local API Generation Error:", err);
+      setError(errorMessage);
+      setSyncStatus('❌ Failed to generate scenarios');
+      
+      // Fallback to template-based generation
+      await generateTemplateScenarios(stories);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // NEW: Generate template-based scenarios as fallback
+  const generateTemplateScenarios = async (storiesData: LocalUserStory[]): Promise<void> => {
+    console.log("🔄 Creating template-based scenarios as fallback...");
+    
+    try {
+      if (!projectId) return;
+      
+      const projectData = localStorageService.getProject(projectId);
+      if (!projectData) {
+        setError("Project not found");
+        return;
+      }
+
+      const scenarios: LocalScenario[] = [];
+      
+      // Limit to 3 user stories for performance
+      storiesData.slice(0, 3).forEach((story, storyIndex) => {
+        const role = story.role || 'User';
+        const action = story.action || 'use system';
+        const benefit = story.benefit || 'achieve goal';
+        const feature = story.feature || 'General';
+
+        // Create different scenario types
+        const scenarioTypes = [
+          {
+            type: 'happy_path' as const,
+            text: `${role} successfully ${action} and ${benefit}`,
+            title: `Successful ${action}`,
+            steps: [
+              `Given ${role} wants to ${action}`,
+              `When they follow the correct procedure`,
+              `Then the system should process the request successfully`,
+              `And ${benefit}`
+            ]
+          },
+          {
+            type: 'alternate_path' as const,
+            text: `${role} ${action} using an alternative method and ${benefit}`,
+            title: `Alternative ${action}`,
+            steps: [
+              `Given ${role} needs to ${action}`,
+              `When they choose an alternative method`,
+              `Then the system should accommodate the variation`,
+              `And ${benefit}`
+            ]
+          },
+          {
+            type: 'exception_path' as const,
+            text: `${role} encounters an error while trying to ${action}`,
+            title: `Error in ${action}`,
+            steps: [
+              `Given ${role} attempts to ${action}`,
+              `When they provide invalid or missing data`,
+              `Then the system should display appropriate error messages`,
+              `And guide them to correct the input`
+            ]
+          }
+        ];
+
+        scenarioTypes.forEach((scenarioType, typeIndex) => {
+          const scenarioId = `template_${projectId}_${story.story_id}_${scenarioType.type}_${Date.now()}_${storyIndex}_${typeIndex}`;
+          
+          const scenarioInput: Omit<LocalScenario, 'scenario_id' | 'created_at' | 'updated_at'> = {
+            project_id: projectId,
+            user_story_id: story.story_id,
+            scenario_text: scenarioType.text,
+            scenario_type: scenarioType.type,
+            title: scenarioType.title,
+            detected_domain: projectData.domain || 'general',
+            has_proper_structure: true,
+            gherkin_steps: scenarioType.steps,
+            enhanced_with_llm: false,
+            status: 'draft',
+          };
+
+          const savedScenario = localStorageService.createScenario(scenarioInput, scenarioId);
+          scenarios.push(savedScenario);
+        });
+      });
+
+      // Get existing scenarios and combine with new ones
+      const existingScenarios = localStorageService.getScenariosByProject(projectId);
+      const allScenarios = [...existingScenarios, ...scenarios];
+      
+      setScenarios(allScenarios);
+      setHasGenerated(true);
+      setSuccess(`Generated ${scenarios.length} template scenarios as fallback (Total: ${allScenarios.length})`);
+      setSyncStatus('✅ Used template-based scenarios');
+      
+      console.log(`✅ Generated ${scenarios.length} template scenarios (Total: ${allScenarios.length})`);
+
+    } catch (error) {
+      console.error("❌ Error creating template scenarios:", error);
+      setError("Failed to generate template scenarios");
+    }
+  };
+
+  // UPDATED: Fallback scenarios using local API
+  const generateFallbackScenariosViaAPI = async (storiesData: LocalUserStory[]): Promise<void> => {
+    console.log("🔄 Creating fallback scenarios via local API...");
+    
+    try {
+      if (!projectId) return;
+      
+      const projectData = localStorageService.getProject(projectId);
+      if (!projectData) {
+        setError("Project not found");
+        return;
+      }
+
+      const wireframesData = localStorageService.getWireframesByProject(projectId);
+      
+      // Try local API first
+      await generateScenariosViaLocalAPI(projectId, projectData, storiesData, wireframesData);
+      
+    } catch (error) {
+      console.error("❌ Local API fallback failed:", error);
+      // If API fails, use template generation
+      await generateTemplateScenarios(storiesData);
     }
   };
 
@@ -283,37 +531,6 @@ export default function HasilGenerate() {
       }
     } catch (error) {
       console.error('Error updating sync info:', error);
-    }
-  };
-
-  const generateFallbackScenarios = async (storiesData: LocalUserStory[]): Promise<void> => {
-    console.log("🔄 Creating fallback scenarios");
-    
-    try {
-      const projectData = localStorageService.getProject(projectId!);
-      if (!projectData) {
-        setError("Project not found");
-        return;
-      }
-
-      const fallbackResult = await scenarioService.generateScenariosWithSync(
-        projectId!,
-        null, // No token for fallback
-        projectData,
-        storiesData,
-        wireframes
-      );
-
-      if (fallbackResult.success && fallbackResult.data) {
-        setScenarios(fallbackResult.data);
-        setHasGenerated(true);
-        setSuccess(`Generated ${fallbackResult.data.length} fallback scenarios`);
-      } else {
-        setError("Failed to generate fallback scenarios");
-      }
-    } catch (error) {
-      console.error("❌ Error creating fallback scenarios:", error);
-      setError("Failed to generate scenarios. Please try again.");
     }
   };
 
@@ -441,112 +658,91 @@ export default function HasilGenerate() {
     }
   };
 
+  // UPDATED: Handle generate new using local API
   const handleGenerateNew = async (): Promise<void> => {
     try {
       setGenerating(true);
       setError(null);
       setSuccess(null);
+      setSyncStatus('Generating new scenarios via local API...');
       
-      const authToken = localStorage.getItem('access_token');
-      
-      console.log('🔄 Generating new scenarios with sync...');
+      console.log('🚀 Generating new scenarios via local API...');
       
       const projectData = localStorageService.getProject(projectId!);
       if (!projectData) {
         throw new Error('Project not found');
       }
       
-      const generationResult = await scenarioService.generateScenariosWithSync(
-        projectId!,
-        authToken,
-        projectData,
-        userStories,
-        wireframes
-      );
-
-      if (generationResult.success && generationResult.data && generationResult.data.length > 0) {
-        setScenarios(generationResult.data);
-        setHasGenerated(true);
-        setSuccess(generationResult.message);
-        
-        if (generationResult.autoSynced) {
-          console.log('✅ Scenarios auto-synced during generation');
-        }
-      } else {
-        throw new Error(generationResult.error || 'Failed to generate scenarios');
+      const stories = localStorageService.getUserStoriesByProject(projectId!);
+      const wireframesData = localStorageService.getWireframesByProject(projectId!);
+      
+      if (stories.length === 0) {
+        throw new Error('No user stories found');
       }
+      
+      if (wireframesData.length === 0) {
+        throw new Error('No wireframes found');
+      }
+      
+      // Use local API for generation (it won't clear existing scenarios)
+      await generateScenariosViaLocalAPI(projectId!, projectData, stories, wireframesData);
+      
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Error generating scenarios';
       console.error("❌ Error generating scenarios:", errorMessage);
       setError(errorMessage);
+      setSyncStatus('❌ Generation failed');
     } finally {
       setGenerating(false);
     }
   };
 
-  const handleAccept = async (): Promise<void> => {
-    try {
-      if (!projectId) {
-        console.error("No project ID provided");
-        return;
-      }
-      
-      if (scenarios.length === 0) {
-        console.error("No scenarios to accept");
-        return;
-      }
-      
-      // Update all scenarios to approved in localStorage
-      const updatedScenarios = scenarios.map(scenario => ({
-        ...scenario,
-        status: 'approved' as const,
-        updated_at: new Date().toISOString()
-      }));
-      
-      // Update in localStorage
-      try {
-        const allScenariosRaw = localStorage.getItem('local_scenarios');
-        const allScenarios = allScenariosRaw ? JSON.parse(allScenariosRaw) : [];
-        
-        const updatedAllScenarios = allScenarios.map((s: any) => {
-          if (s.project_id === projectId) {
-            const matchingScenario = updatedScenarios.find(us => us.scenario_id === s.scenario_id);
-            return matchingScenario || s;
-          }
-          return s;
-        });
-        
-        localStorage.setItem('local_scenarios', JSON.stringify(updatedAllScenarios));
-        
-        console.log("✅ Updated scenarios status to approved:", updatedScenarios.length);
-      } catch (storageError) {
-        console.error("❌ Error updating scenario status:", storageError);
-      }
-      
-      // Update state
-      setScenarios(updatedScenarios);
-      
-      console.log(`✅ Accepted ${scenarios.length} scenarios`);
-      
-      // If authenticated, sync the accepted status to database
-      const authToken = localStorage.getItem('access_token');
-      if (authToken) {
-        try {
-          await scenarioSyncService.syncLocalToDatabase(projectId, authToken);
-          console.log('✅ Synced accepted status to database');
-        } catch (syncError) {
-          console.error('Failed to sync accepted status:', syncError);
+  const handleAccept = useCallback(async (): Promise<void> => {
+  if (!projectId) {
+    console.error("No project ID provided");
+    return;
+  }
+  
+  try {
+    // Show loading/processing state
+    setSuccess("Accepting scenarios...");
+    
+    // Quick local update
+    const allScenariosRaw = localStorage.getItem('local_scenarios');
+    if (allScenariosRaw) {
+      const allScenarios: LocalScenario[] = JSON.parse(allScenariosRaw);
+      const updatedScenarios = allScenarios.map(scenario => {
+        if (scenario.project_id === projectId) {
+          return { ...scenario, status: 'approved', updated_at: new Date().toISOString() };
         }
-      }
-      
-      // Navigate to preview-final page
-      navigate(`/preview-final/${projectId}`);
-      
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Error accepting scenarios';
-      console.error("💥 Accept error:", err);
+        return scenario;
+      });
+      localStorage.setItem('local_scenarios', JSON.stringify(updatedScenarios));
     }
-  };
+    
+    // Update local state
+    const updatedCurrentScenarios = scenarios.map(scenario => ({
+      ...scenario,
+      status: 'approved' as const,
+      updated_at: new Date().toISOString()
+    }));
+    setScenarios(updatedCurrentScenarios);
+    
+    // Navigate after brief delay for user feedback
+    setTimeout(() => {
+      navigate(`/preview-final/${projectId}`);
+    }, 800);
+    
+  } catch (err) {
+    console.error("Accept error:", err);
+    setError("Error accepting scenarios");
+    // Still navigate anyway
+    setTimeout(() => {
+      navigate(`/preview-final/${projectId}`);
+    }, 1000);
+  }
+}, [navigate, projectId, scenarios]);
+
 
   // Function to normalize scenario type
   const normalizeScenarioType = (scenarioType: string | undefined): ScenarioType => {
@@ -612,13 +808,6 @@ export default function HasilGenerate() {
     });
     
     const total = scenarios.length;
-    
-    // Debug log
-    console.log("📊 Scenario Statistics:", {
-      total,
-      counts,
-      scenarioTypes: scenarios.map(s => s.scenario_type)
-    });
     
     return {
       total,
@@ -904,7 +1093,7 @@ export default function HasilGenerate() {
         <div className="text-center py-8">
           <div className="text-gray-400 text-4xl mb-4">📋</div>
           <h3 className="text-lg font-semibold text-gray-700 mb-2">No scenarios generated yet</h3>
-          <p className="text-gray-500 mb-6">Click the button below to generate scenarios</p>
+          <p className="text-gray-500 mb-6">Click the button below to generate scenarios via local API</p>
           <button
             onClick={handleGenerateNew}
             className="rounded-lg bg-green-500 px-6 py-3 text-white font-medium shadow-sm hover:bg-green-600 transition"
@@ -1135,7 +1324,7 @@ export default function HasilGenerate() {
           <div className="max-w-5xl mx-auto bg-white shadow-md rounded-xl p-6">
             <div className="flex flex-col items-center justify-center h-64">
               <div className="text-lg text-gray-600 mb-4">
-                {generating ? "Generating scenarios..." : 
+                {generating ? "Generating scenarios via local API..." : 
                  syncLoading ? "Syncing scenarios..." : 
                  "Loading scenarios..."}
               </div>

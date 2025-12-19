@@ -147,6 +147,8 @@ class UserStoryGenerator:
 
         def create_story_from_parts(role: str, action: str, benefit: str) -> Dict:
             """Create a complete story object from parts"""
+            import time
+            timestamp = int(time.time() * 1000)
             def extract_feature_from_text(action_text: str) -> str:
                 """Extract feature category from action text"""
                 if not action_text:
@@ -190,7 +192,7 @@ class UserStoryGenerator:
                     f"The benefit '{benefit}' is achieved"
                 ],
                 "priority": "Medium",
-                "id": f"US{hash(role + action + benefit) % 10000:04d}"  # Simple ID
+                "id": f"US_{timestamp}_{hash(role + action + benefit) % 10000:04d}"  # FIXED: Add timestamp
             }
 
         def extract_stories_from_any_text(text: str) -> List[Dict]:
@@ -418,6 +420,8 @@ class UserStoryGenerator:
     def generate_comprehensive_user_stories(self, project_info: Dict, project_analysis: Dict, similar_patterns: List[Dict]) -> List[Dict]:
         """Generate comprehensive INVEST-compliant user stories - EXACT SAME AS COLAB"""
         print("🧠 Generating comprehensive INVEST-compliant user stories...")
+        import time
+        session_timestamp = int(time.time() * 1000)
 
         # Clean role names
         users = [role.split('(')[0].strip() if '(' in role else role.strip()
@@ -502,6 +506,7 @@ Generate 2 user stories for {simple_role}:
                     print(f"      ✅ Generated {len(user_stories)} stories for {simple_role}")
                     # Ensure proper role assignment
                     for story in user_stories:
+                        story['id'] = f"US_{session_timestamp}_{len(all_stories) + 1:03d}"
                         story['role'] = original_role  # Use original role name
                     all_stories.extend(user_stories)
                 else:
@@ -520,8 +525,9 @@ Generate 2 user stories for {simple_role}:
             all_stories = self.generate_comprehensive_fallback_stories(users, features, domain)
 
         # Ensure all stories have required fields and proper IDs
-        for i, story in enumerate(all_stories):
-            story['id'] = f"US{i+1:03d}"
+    
+            for i, story in enumerate(all_stories):
+                story['id'] = f"US_{session_timestamp}_{i:03d}"  # Use session timestamp
 
             # Ensure all required fields exist with proper values
             if 'text' not in story:
@@ -555,6 +561,8 @@ Generate 2 user stories for {simple_role}:
 
     def generate_fallback_stories_for_user(self, user: str, features: List[str], domain: str) -> List[Dict]:
         """Generate fallback stories when LLM fails - EXACT SAME AS COLAB"""
+        import time
+        timestamp = int(time.time() * 1000)
         stories = []
 
         # Agriculture-specific benefits
@@ -614,7 +622,7 @@ Generate 2 user stories for {simple_role}:
             )
 
             stories.append({
-                "id": f"FB_{user}_{i+1:03d}",
+                "id": f"US_{timestamp}_{user}_{i+1:03d}",
                 "text": story_text,
                 "role": user,
                 "feature": feature[:50],  # Truncate if too long
@@ -630,6 +638,8 @@ Generate 2 user stories for {simple_role}:
 
     def generate_comprehensive_fallback_stories(self, users: List[str], features: List[str], domain: str) -> List[Dict]:
         """Comprehensive fallback when all else fails"""
+        import time
+        timestamp = int(time.time() * 1000)
         all_stories = []
         for user in users:
             user_stories = self.generate_fallback_stories_for_user(user, features, domain)
@@ -637,7 +647,7 @@ Generate 2 user stories for {simple_role}:
 
         # Ensure unique IDs
         for i, story in enumerate(all_stories):
-            story['id'] = f"CF_{i+1:03d}"
+            story['id'] = f"US_{timestamp}_{i:03d}"
 
         return all_stories
 

@@ -523,7 +523,7 @@ def generate_wireframes_for_local_project(request):
     POST /api/local-projects/generate-wireframes/
     """
     import time
-    time.sleep(2)  # Add 2-second delay between API calls
+    time.sleep(4)  # Add 4-second delay between API calls
 
     try:
         print("🔍 DEBUG: Starting wireframe generation")
@@ -870,6 +870,10 @@ def generate_scenarios_for_local_project(request):
     
     STOPS IMMEDIATELY if no user stories or wireframes provided
     """
+    import time
+    time.sleep(2)  # Add 2-second delay between API calls
+
+
     try:
         print("🔍 [BACKEND] Starting scenario generation for local project")
         
